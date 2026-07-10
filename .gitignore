@@ -1,0 +1,28 @@
+# Build & dependency targets
+target/
+*.log
+
+# Sensitive or data-carrying JSON runtime state
+*data*.json
+*.data.json
+servers.json
+*_commands.json
+commands.json
+history.json
+*.db
+*.sqlite
+
+# Architecture documents (excluded from version control)
+app_architecture*
+APP_ARCHITECTURE*
+architecture*
+ARCHITECTURE*
+
+# Tauri generated
+/gen/
+
+# OS & Editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
