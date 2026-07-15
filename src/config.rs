@@ -1,0 +1,224 @@
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::fs;
+use std::path::{Path, PathBuf};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CustomAction {
+    pub label: String,
+    pub command: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CustomLink {
+    pub label: String,
+    pub url: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServerConfig {
+    pub key: String,
+    pub name: String,
+    #[serde(default = "default_cwd")]
+    pub cwd: String,
+    pub command: String,
+    #[serde(default)]
+    pub stop_command: String,
+    #[serde(default)]
+    pub port: u16,
+    #[serde(default = "default_group")]
+    pub group: String,
+    #[serde(default)]
+    pub own_console: bool,
+    #[serde(default)]
+    pub auto_restart: bool,
+    #[serde(default)]
+    pub autostart: bool,
+    #[serde(default)]
+    pub env: HashMap<String, String>,
+    #[serde(default)]
+    pub actions: Vec<CustomAction>,
+    #[serde(default)]
+    pub links: Vec<CustomLink>,
+    #[serde(default)]
+    pub server_type: Option<String>,
+    #[serde(default)]
+    pub url: Option<String>,
+    #[serde(default)]
+    pub headers: HashMap<String, String>,
+}
+
+impl Default for ServerConfig {
+    fn default() -> Self {
+        Self {
+            key: String::new(),
+            name: String::new(),
+            cwd: default_cwd(),
+            command: String::new(),
+            stop_command: String::new(),
+            port: 0,
+            group: default_group(),
+            own_console: false,
+            auto_restart: false,
+            autostart: false,
+            env: HashMap::new(),
+            actions: Vec::new(),
+            links: Vec::new(),
+            server_type: None,
+            url: None,
+            headers: HashMap::new(),
+        }
+    }
+}
+
+fn default_cwd() -> String {
+    ".".to_string()
+}
+
+fn default_group() -> String {
+    "General".to_string()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SshRemoteHost {
+    pub id: String,
+    pub name: String,
+    pub host: String,
+    #[serde(default = "default_ssh_port")]
+    pub port: u16,
+    #[serde(default = "default_ssh_user")]
+    pub user: String,
+    #[serde(default)]
+    pub key_path: String,
+    #[serde(default)]
+    pub password: String,
+    #[serde(default)]
+    pub remote_cwd: String,
+}
+
+fn default_ssh_port() -> u16 {
+    22
+}
+
+fn default_ssh_user() -> String {
+    "ubuntu".to_string()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CustomScript {
+    pub id: String,
+    pub name: String,
+    pub script: String,
+    #[serde(default = "default_script_shell")]
+    pub shell: String,
+    #[serde(default = "default_cwd")]
+    pub cwd: String,
+    #[serde(default)]
+    pub autostart: bool,
+    #[serde(default)]
+    pub host_id: Option<String>, // None for Local PC, Some(id) for SSH Host
+}
+
+fn default_script_shell() -> String {
+    "bash".to_string()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SavedCommand {
+    pub id: String,
+    pub name: String,
+    pub command: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default = "default_command_category")]
+    pub category: String,
+    #[serde(default)]
+    pub host_id: Option<String>, // None for Local PC, Some(id) for SSH Host
+    #[serde(default)]
+    pub run_in_terminal: bool,
+}
+
+fn default_command_category() -> String {
+    "General".to_string()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AdbDeviceConfig {
+    pub id: String,
+    pub name: String,
+    pub serial: String,
+    #[serde(default)]
+    pub is_wireless: bool,
+    #[serde(default)]
+    pub ip_port: Option<String>,
+    #[serde(default)]
+    pub scrcpy_max_fps: Option<u32>,
+    #[serde(default)]
+    pub scrcpy_bitrate_mbps: Option<u32>,
+    #[serde(default)]
+    pub scrcpy_stay_awake: bool,
+    #[serde(default)]
+    pub scrcpy_turn_screen_off: bool,
+    #[serde(default)]
+    pub scrcpy_no_audio: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ConfigFile {
+    pub servers: Vec<ServerConfig>,
+    #[serde(default)]
+    pub ssh_hosts: Vec<SshRemoteHost>,
+    #[serde(default)]
+    pub adb_devices: Vec<AdbDeviceConfig>,
+    #[serde(default)]
+    pub scripts: Vec<CustomScript>,
+    #[serde(default)]
+    pub saved_commands: Vec<SavedCommand>,
+    #[serde(default)]
+    pub theme: Option<String>,
+    #[serde(default)]
+    pub accent_color: Option<String>,
+    #[serde(default)]
+    pub app_autostart: bool,
+    #[serde(default)]
+    pub journal_refresh_interval: Option<u32>,
+}
+
+impl ConfigFile {
+    pub fn default_path() -> PathBuf {
+        // Look in current working directory or next to binary
+        let local_path = PathBuf::from("servers.json");
+        if local_path.exists() {
+            return local_path;
+        }
+
+        // Try parent directory (e.g. if running inside server_launcher_rust/)
+        let parent_path = PathBuf::from("../servers.json");
+        if parent_path.exists() {
+            return parent_path;
+        }
+
+        local_path
+    }
+
+    pub fn load_from_file(path: &Path) -> Self {
+        if let Ok(content) = fs::read_to_string(path) {
+            if let Ok(cfg) = serde_json::from_str::<ConfigFile>(&content) {
+                return cfg;
+            }
+        }
+        Self::default()
+    }
+
+    pub fn save_to_file(&self, path: &Path) -> Result<(), String> {
+        let content = serde_json::to_string_pretty(self)
+            .map_err(|e| format!("Serialization error: {}", e))?;
+        fs::write(path, content).map_err(|e| format!("Write error: {}", e))?;
+        Ok(())
+    }
+}
+
+pub fn parse_server_json_value(key: &str, val: &serde_json::Value) -> Option<ServerConfig> {
+    // 1. If it directly deserializes as ServerConfig and has content
+    if let Ok(mut cfg) = serde_json::from_value::<ServerConfig>(val.clone()) {
+        if !cfg.name.is_empty() || !cfg.command.is_empty() || cfg.url.is_some() {
