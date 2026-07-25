@@ -127,3 +127,132 @@ pub struct AdbDeviceSensors {
     pub mem_available_kb: Option<u64>,
     pub mem_free_kb: Option<u64>,
     pub mem_buffers_kb: Option<u64>,
+    pub mem_cached_kb: Option<u64>,
+    pub mem_dirty_kb: Option<u64>,
+    pub swap_total_kb: Option<u64>,
+    pub swap_free_kb: Option<u64>,
+    pub storage_internal_total_kb: Option<u64>,
+    pub storage_internal_free_kb: Option<u64>,
+    pub storage_shared_total_kb: Option<u64>,
+    pub storage_shared_free_kb: Option<u64>,
+    pub disk_counters: Vec<AdbDiskCounters>,
+    pub gpu_renderer: String,
+    pub gpu_platform: String,
+    pub battery_voltage_mv: Option<u64>,
+    pub battery_health: String,
+    pub battery_plugged: String,
+    pub battery_pct: Option<f32>,
+    pub battery_status: String,
+    pub battery_temp_c: Option<f32>,
+    pub battery_current_ua: Option<i64>,
+    pub battery_charge_counter_uah: Option<u64>,
+    pub battery_charge_full_uah: Option<u64>,
+    pub battery_charge_full_design_uah: Option<u64>,
+    pub battery_cycle_count: Option<u64>,
+    pub battery_technology: Option<String>,
+    pub cpu_governor: Option<String>,
+    pub cpu_available_governors: Vec<String>,
+    /// Platform power attribution; empty when batterystats has no history yet.
+    pub power_attribution: Vec<AdbPowerAttribution>,
+    /// Seconds covered by the batterystats window, used to turn mAh into watts.
+    pub power_attribution_secs: Option<f64>,
+    pub wifi_enabled: Option<bool>,
+    pub bluetooth_enabled: Option<bool>,
+    pub bluetooth_name: Option<String>,
+    pub bluetooth_address: Option<String>,
+    pub bluetooth_state: Option<String>,
+    pub bluetooth_scan_mode: Option<String>,
+    pub bluetooth_connection_state: Option<String>,
+    pub bluetooth_class: Option<String>,
+    pub bluetooth_uptime: Option<String>,
+    pub bluetooth_max_audio_devices: Option<u32>,
+    pub bluetooth_a2dp_offload: Option<bool>,
+    pub bluetooth_active_device: Option<String>,
+    pub bluetooth_profiles: Vec<String>,
+    pub bluetooth_bonded_devices: Vec<String>,
+    pub network_interfaces: Vec<AdbNetworkInterface>,
+    pub temperatures: Vec<AdbTemperatureSensor>,
+    pub sensor_names: Vec<String>,
+    pub uptime_secs: Option<u64>,
+    pub socket_total: usize,
+    pub socket_tcp: usize,
+    pub socket_udp: usize,
+    pub cellular_operator: String,
+    pub sim_operator: String,
+    pub sim_state: String,
+    pub sim_slots: Vec<AdbSimSlot>,
+    pub cellular_network_type: String,
+    pub cellular_numeric: String,
+    pub cellular_country: String,
+    pub baseband_version: String,
+    pub ril_impl: String,
+    pub mobile_data_enabled: Option<bool>,
+    pub data_roaming_enabled: Option<bool>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AdbFileEntry {
+    pub name: String,
+    pub is_dir: bool,
+    pub size_bytes: u64,
+    pub permissions: String,
+    pub modified: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AdbPackageInfo {
+    pub name: String,
+    pub is_system: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AdbNotification {
+    pub id: String,
+    pub package: String,
+    pub app_name: String,
+    pub title: String,
+    pub text: String,
+    pub subtext: String,
+    pub time_str: String,
+    pub key: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AdbCallType {
+    Incoming,
+    Outgoing,
+    Missed,
+}
+
+impl AdbCallType {
+    pub fn label(&self) -> &'static str {
+        match self {
+            AdbCallType::Incoming => "Incoming",
+            AdbCallType::Outgoing => "Outgoing",
+            AdbCallType::Missed => "Missed",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AdbCallLogEntry {
+    pub id: String,
+    pub number: String,
+    pub name: String,
+    pub call_type: AdbCallType,
+    pub time_str: String,
+    pub duration_str: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AdbSmsMessage {
+    pub id: String,
+    pub address: String,
+    pub contact_name: String,
+    pub text: String,
+    pub time_str: String,
+    pub is_outgoing: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AdbPhotoItem {
