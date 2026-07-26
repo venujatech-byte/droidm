@@ -514,3 +514,132 @@ pub fn query_telemetry(serial: &str) -> AdbDeviceTelemetry {
     }
 
     // 2. Query Battery telemetry via dumpsys battery
+    if let Ok(bat_raw) = adb_cmd(Some(serial), &["shell", "dumpsys", "battery"]) {
+        for line in bat_raw.lines() {
+            let line = line.trim();
+            if let Some(val) = line.strip_prefix("level:") {
+                telem.battery_pct = val.trim().parse::<f32>().ok();
+            } else if let Some(val) = line.strip_prefix("temperature:") {
+                if let Ok(t) = val.trim().parse::<f32>() {
+                    let temp = if t.abs() > 150.0 { t / 10.0 } else { t };
+                    telem.battery_temp_c = Some((temp * 10.0).round() / 10.0);
+                }
+            } else if let Some(val) = line.strip_prefix("status:") {
+                telem.battery_status = match val.trim() {
+                    "2" => Some("Charging (AC/USB)".to_string()),
+                    "3" => Some("Discharging".to_string()),
+                    "4" => Some("Not Charging".to_string()),
+                    "5" => Some("Full (100%)".to_string()),
+                    _ => Some("Unknown".to_string()),
+                };
+            }
+        }
+    }
+
+    // 3. Screen display resolution & density
+    if let Ok(wm_size) = adb_cmd(Some(serial), &["shell", "wm", "size"]) {
+        if let Some(res) = wm_size.split(':').nth(1) {
+            telem.screen_res = res.trim().to_string();
+        }
+    }
+    if let Ok(wm_density) = adb_cmd(Some(serial), &["shell", "wm", "density"]) {
+        if let Some(dpi) = wm_density.split(':').nth(1) {
+            telem.screen_dpi = format!("{} DPI", dpi.trim());
+        }
+    }
+
+    // 4. SELinux & Root status
+    if let Ok(selinux) = adb_cmd(Some(serial), &["shell", "getenforce"]) {
+        telem.selinux = selinux.trim().to_string();
+    }
+    telem.is_rooted = adb_cmd(Some(serial), &["shell", "su", "-c", "id"]).map(|s| s.contains("uid=0")).unwrap_or(false);
+
+    // Query each mount independently; Samsung df may fail the whole multi-path request.
+    for path in ["/data", "/storage/emulated/0", "/sdcard"] {
+        if let Ok(df_raw) = adb_cmd(Some(serial), &["shell", "df", "-k", path]) {
+            for line in df_raw.lines() {
+                let Some((mount, total_kb, free_kb)) = parse_android_df_line(line) else { continue; };
+                if mount.starts_with("/data") && telem.storage_internal_total_gb.is_none() {
+                    telem.storage_internal_total_gb = Some((total_kb as f32 / (1024.0 * 1024.0) * 10.0).round() / 10.0);
+                    telem.storage_internal_free_gb = Some((free_kb as f32 / (1024.0 * 1024.0) * 10.0).round() / 10.0);
+                } else if mount.starts_with("/storage/emulated") && telem.storage_sdcard_total_gb.is_none() {
+                    telem.storage_sdcard_total_gb = Some((total_kb as f32 / (1024.0 * 1024.0) * 10.0).round() / 10.0);
+                    telem.storage_sdcard_free_gb = Some((free_kb as f32 / (1024.0 * 1024.0) * 10.0).round() / 10.0);
+                }
+            }
+        }
+    }
+    if telem.storage_sdcard_total_gb.is_none() && telem.storage_internal_total_gb.is_some() {
+        telem.storage_sdcard_total_gb = telem.storage_internal_total_gb;
+        telem.storage_sdcard_free_gb = telem.storage_internal_free_gb;
+    }
+
+    // 6. System Uptime
+    if let Ok(up_raw) = adb_cmd(Some(serial), &["shell", "cat", "/proc/uptime"]) {
+        if let Some(first) = up_raw.split_whitespace().next() {
+            if let Ok(secs) = first.parse::<f64>() {
+                telem.uptime_secs = secs as u64;
+            }
+        }
+    }
+
+    telem
+}
+
+// Prefer global component totals; older Android versions report CPU/GPS only inside UID rows.
+fn parse_power_attribution(text: &str) -> Vec<AdbPowerAttribution> {
+    fn label(name: &str) -> &str {
+        match name {
+            "cpu" | "Cpu" => "CPU",
+            "wifi" | "Wifi" => "Wi-Fi",
+            "radio" | "mobile_radio" => "Cell standby",
+            "gps" | "gnss" | "Gps" => "GPS",
+            "sensor" | "sensors" => "Sensors",
+            "bluetooth" => "Bluetooth",
+            "camera" => "Camera",
+            "flashlight" => "Flashlight",
+            "audio" => "Audio",
+            "video" => "Video",
+            "screen" => "Screen",
+            "wakelock" => "Wake locks",
+            "phone" => "Phone",
+            other => other,
+        }
+    }
+    let mut totals = std::collections::BTreeMap::<String, f32>::new();
+    let mut uid_totals = std::collections::BTreeMap::<String, f32>::new();
+    let modern = text.lines().any(|line| line.trim() == "Global");
+    let has_battery_states = text.contains("(on battery,");
+    let mut on_battery = false;
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if modern {
+            if trimmed.starts_with("UID ") { break; }
+            if trimmed.starts_with('(') {
+                on_battery = trimmed.starts_with("(on battery,");
+                continue;
+            }
+            // State subtotals partition the global total; never add both or include charger use.
+            if has_battery_states && !on_battery { continue; }
+            if !has_battery_states && line.len() - line.trim_start().len() > 4 { continue; }
+        }
+        let Some((name, rest)) = line.trim().split_once(':') else { continue };
+        if name == "Capacity" { continue; }
+        let Some(mah) = rest.split_whitespace().next().and_then(|v| v.parse::<f32>().ok())
+            .filter(|v| v.is_finite() && *v >= 0.0) else { continue };
+        if name.starts_with("Uid ") {
+            let mut accounted = 0.0;
+            // Ignore the later "Including smearing" block: it redistributes existing power.
+            if let Some((_, components)) = rest.split_once('(') {
+                for component in components.split(')').next().unwrap_or("").split_whitespace() {
+                    let Some((key, value)) = component.split_once('=') else { continue };
+                    let Some(value) = value.parse::<f32>().ok().filter(|v| v.is_finite() && *v >= 0.0) else { continue };
+                    if key == "proportional" { continue; }
+                    *uid_totals.entry(label(key).to_string()).or_default() += value;
+                    accounted += value;
+                }
+            }
+            if mah - accounted > 0.00001 {
+                *uid_totals.entry("Other apps / services".to_string()).or_default() += mah - accounted;
+            }
+        } else {
