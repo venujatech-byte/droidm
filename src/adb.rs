@@ -256,3 +256,132 @@ pub struct AdbSmsMessage {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AdbPhotoItem {
+    pub name: String,
+    pub path: String,
+    pub size_str: String,
+    pub date_str: String,
+}
+
+/// Executes an adb command with optional device serial target.
+pub fn adb_cmd(serial: Option<&str>, args: &[&str]) -> Result<String, String> {
+    let mut cmd = Command::new("adb");
+    if let Some(s) = serial {
+        if !s.is_empty() {
+            cmd.arg("-s").arg(s);
+        }
+    }
+    cmd.args(args);
+    cmd.stdin(Stdio::null());
+
+    match cmd.output() {
+        Ok(out) => {
+            let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+            let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+            if out.status.success() {
+                Ok(stdout.trim().to_string())
+            } else {
+                let err = if !stderr.trim().is_empty() {
+                    stderr.trim().to_string()
+                } else if !stdout.trim().is_empty() {
+                    stdout.trim().to_string()
+                } else {
+                    format!("Command exited with code {}", out.status.code().unwrap_or(-1))
+                };
+                Err(err)
+            }
+        }
+        Err(e) => Err(format!("Failed to execute adb: {}", e)),
+    }
+}
+
+fn parse_android_df_line(line: &str) -> Option<(String, u64, u64)> {
+    let fields: Vec<&str> = line.split_whitespace().collect();
+    if fields.len() < 6 { return None; }
+    Some((
+        fields.last()?.to_string(),
+        fields.get(1)?.parse().ok()?,
+        fields.get(3)?.parse().ok()?,
+    ))
+}
+
+fn parse_sim_slots(operator: &str, state: &str, network_type: &str, numeric: &str, country: &str) -> Vec<AdbSimSlot> {
+    let values = [operator, state, network_type, numeric, country].map(|value| {
+        value.split(',').map(str::trim).map(str::to_string).collect::<Vec<_>>()
+    });
+    let count = if values.iter().any(|items| items.iter().any(|item| !item.is_empty())) {
+        values.iter().map(Vec::len).max().unwrap_or(0).min(2)
+    } else { 0 };
+    (0..count).map(|index| AdbSimSlot {
+        slot: index + 1,
+        operator: values[0].get(index).cloned().unwrap_or_default(),
+        state: values[1].get(index).cloned().unwrap_or_default(),
+        network_type: values[2].get(index).cloned().unwrap_or_default(),
+        numeric: values[3].get(index).cloned().unwrap_or_default(),
+        country: values[4].get(index).cloned().unwrap_or_default(),
+    }).collect()
+}
+
+/// Parses output from `adb devices -l` and returns all attached devices.
+pub fn list_devices() -> Vec<AdbDeviceInfo> {
+    let mut devices = Vec::new();
+    let output = match adb_cmd(None, &["devices", "-l"]) {
+        Ok(s) => s,
+        Err(_) => return devices,
+    };
+
+    for line in output.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with("List of devices") || line.starts_with("* daemon") {
+            continue;
+        }
+
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() < 2 {
+            continue;
+        }
+
+        let serial = parts[0].to_string();
+        let state = parts[1].to_string();
+
+        let mut product = String::new();
+        let mut model = String::new();
+        let mut device = String::new();
+        let mut transport_id = String::new();
+
+        for p in &parts[2..] {
+            if let Some(val) = p.strip_prefix("product:") {
+                product = val.to_string();
+            } else if let Some(val) = p.strip_prefix("model:") {
+                model = val.replace('_', " ");
+            } else if let Some(val) = p.strip_prefix("device:") {
+                device = val.to_string();
+            } else if let Some(val) = p.strip_prefix("transport_id:") {
+                transport_id = val.to_string();
+            }
+        }
+
+        if model.is_empty() {
+            model = if serial.contains(':') {
+                format!("Wireless Device ({})", serial)
+            } else {
+                format!("USB Device ({})", serial)
+            };
+        }
+
+        devices.push(AdbDeviceInfo {
+            serial,
+            state,
+            model,
+            product,
+            device,
+            transport_id,
+        });
+    }
+
+    devices
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AdbNetworkEndpoint {
+    pub interface: String,
+    pub ip: String,
