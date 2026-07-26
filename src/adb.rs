@@ -643,3 +643,132 @@ fn parse_power_attribution(text: &str) -> Vec<AdbPowerAttribution> {
                 *uid_totals.entry("Other apps / services".to_string()).or_default() += mah - accounted;
             }
         } else {
+            *totals.entry(label(name).to_string()).or_default() += mah;
+        }
+    }
+    for (name, mah) in uid_totals {
+        totals.entry(name).or_insert(mah);
+    }
+    totals.into_iter().map(|(label, mah)| AdbPowerAttribution { label, mah }).collect()
+}
+
+// Android durations may contain days and milliseconds, with or without spaces.
+fn parse_battery_time(line: &str) -> Option<f64> {
+    let (_, rest) = line.split_once("Time on battery:")?;
+    let (duration, _) = rest.split_once('(')?;
+    let mut rest = duration.trim();
+    let mut seconds = 0.0;
+    while !rest.is_empty() {
+        let end = rest.find(|c: char| !c.is_ascii_digit())?;
+        let value = rest[..end].parse::<u64>().ok()? as f64;
+        rest = &rest[end..];
+        let (unit, scale) = [("ms", 0.001), ("d", 86400.0), ("h", 3600.0), ("m", 60.0), ("s", 1.0)]
+            .into_iter()
+            .find(|(unit, _)| rest.starts_with(unit))?;
+        seconds += value * scale;
+        rest = rest[unit.len()..].trim_start();
+    }
+    (seconds.is_finite() && seconds > 0.0).then_some(seconds)
+}
+
+#[cfg(test)]
+mod power_time_tests {
+    use super::{parse_android_df_line, parse_battery_time, parse_power_attribution, parse_sensor_inventory, parse_sensor_readings, parse_sim_slots, process_disk_rates};
+
+    #[test]
+    fn parses_sim_slots_from_android_property_lists() {
+        let sims = parse_sim_slots("Hutch,Dialog", "READY,ABSENT", "LTE,Unknown", "41308,41302", "lk,lk");
+        assert_eq!(sims.len(), 2);
+        assert_eq!(sims[0].operator, "Hutch");
+        assert_eq!(sims[1].state, "ABSENT");
+        assert_eq!(sims[1].numeric, "41302");
+    }
+
+    #[test]
+    fn reads_sensor_names_and_fingerprint_feature() {
+        let sensors = parse_sensor_inventory("0x0001 (handle=1) BMI270 Accelerometer | vendor\nfeature:android.hardware.fingerprint\n__FEATURES__");
+        assert_eq!(sensors, ["BMI270 Accelerometer", "Fingerprint authentication"]);
+    }
+
+    #[test]
+    fn parses_latest_sensor_event_values() {
+        let dump = "Recent Sensor events:\nAmbient Light: last 50 events\n 1 (ts=1.2, wall=10-20 19:26:33.676) 5.23, 0.00, 0.00,\n 2 (ts=2.2, wall=10-20 19:26:34.431) 5.88, 0.00, 0.00,\nAccelerometer: last 50 events\n 1 (ts=3.0, wall=10-20 19:26:35.000) -0.18, -0.16, 10.17,\nActive sensors:\n";
+        let readings = parse_sensor_readings(dump);
+        assert_eq!(readings.len(), 2);
+        assert_eq!(readings[0].values, [5.88, 0.0, 0.0]);
+        assert_eq!(readings[0].time, "10-20 19:26:34.431");
+        assert_eq!(readings[1].values, [-0.18, -0.16, 10.17]);
+    }
+
+    #[test]
+    fn parses_android_df_rows_with_emulated_mount_aliases() {
+        assert_eq!(
+            parse_android_df_line("/dev/block/dm-61 237828076 201474160 36222844 85% /data/user/0"),
+            Some(("/data/user/0".into(), 237828076, 36222844))
+        );
+        assert_eq!(
+            parse_android_df_line("/dev/fuse 234000000 190000000 44000000 82% /storage/emulated"),
+            Some(("/storage/emulated".into(), 234000000, 44000000))
+        );
+        assert_eq!(parse_android_df_line("Filesystem 1K-blocks Used Available Use% Mounted on"), None);
+    }
+
+    #[test]
+    fn includes_uid_components_without_smearing_or_double_counting() {
+        let rows = parse_power_attribution("Capacity: 5000\nUid 1000: 3 ( cpu=2 gps=1 ) Including smearing: 8 ( proportional=5 )\nCPU: 4\nWi-Fi: 0.2\nScreen: 1\nUid 1001: 0.5\nGPU: NaN");
+        let values: std::collections::BTreeMap<_, _> = rows.into_iter().map(|r| (r.label, r.mah)).collect();
+        assert_eq!(values["CPU"], 4.0);
+        assert_eq!(values["GPS"], 1.0);
+        assert_eq!(values["Wi-Fi"], 0.2);
+        assert_eq!(values["Other apps / services"], 0.5);
+        assert!(!values.contains_key("GPU"));
+        assert!(!values.contains_key("Capacity"));
+        let cpu = parse_power_attribution("Uid 0: 1 ( cpu=1 )\nUid u0a10: 2 ( cpu=2 )");
+        assert_eq!(cpu[0].label, "CPU");
+        assert_eq!(cpu[0].mah, 3.0);
+    }
+
+    #[test]
+    fn parses_modern_on_battery_states_without_global_or_uid_duplicates() {
+        let rows = parse_power_attribution("    Global\n    cpu: 100 apps: 90\n      (on battery, screen on)\n      cpu: 30 apps: 25\n      (on battery, screen off/doze)\n      cpu: 20 apps: 20\n      (not on battery, screen on)\n      cpu: 50 apps: 45\n  UID 1000: 90\n      cpu=90");
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].label, "CPU");
+        assert_eq!(rows[0].mah, 50.0);
+    }
+
+    #[test]
+    fn parses_battery_realtime_only() {
+        assert_eq!(parse_battery_time("Time on battery: 3s 872ms (0.1%) realtime, 1s (100%) uptime"), Some(3.872));
+        assert_eq!(parse_battery_time("Time on battery: 1d2h3m4s5ms (10%) realtime"), Some(93784.005));
+        for value in ["", "Time on battery: 0ms (0%) realtime", "Time on battery: unknown (0%)", "Time on battery: 1x (0%)"] {
+            assert_eq!(parse_battery_time(value), None);
+        }
+    }
+
+    #[test]
+    fn computes_process_disk_rate_from_counter_deltas() {
+        let mut counters = std::collections::HashMap::from([(42, (100, 200))]);
+        assert!(process_disk_rates("test-device", &counters).is_empty());
+        counters.insert(42, (1100, 1200));
+        assert!(process_disk_rates("test-device", &counters).get(&42).is_some_and(|rate| *rate > 0.0));
+    }
+}
+
+/// Reads Android hardware and resource sensor data in one device shell session.
+pub fn query_device_sensors(serial: &str) -> Result<AdbDeviceSensors, String> {
+    let script = r#"
+echo __CPUINFO__; cat /proc/cpuinfo
+echo __CPU_STAT__; cat /proc/stat
+echo __CPU_FREQ__; for freq in /sys/devices/system/cpu/cpu[0-9]*/cpufreq/scaling_cur_freq; do [ -r "$freq" ] && cat "$freq"; done
+echo __MEMINFO__; cat /proc/meminfo
+echo __TOP__; top -b -n 1 -m 120
+echo __PROCESS_UID__; ps -A -o UID,PID
+echo __PROC_IO__; su -c 'top -b -n 1 -m 120 | while read -r pid rest; do case "$pid" in ""|*[!0-9]*) continue;; esac; r=0; w=0; while read -r key value; do case "$key" in read_bytes:) r=$value;; write_bytes:) w=$value;; esac; done 2>/dev/null < "/proc/$pid/io"; echo "$pid $r $w"; done' 2>/dev/null
+echo __GPU_MEM__; su -c 'gpu_proc=/sys/kernel/debug/kgsl/proc; [ -d "$gpu_proc" ] || gpu_proc=/d/kgsl/proc; [ -d "$gpu_proc" ] || exit 0; echo AVAILABLE; for d in "$gpu_proc"/*; do [ -r "$d/mem" ] || continue; echo "GPU_PID ${d##*/}"; cat "$d/mem"; done' 2>/dev/null
+echo __NET_UID__; dumpsys netstats detail 2>/dev/null | awk '/ident=.*uid=/ {uid=""; for(i=1;i<=NF;i++) if($i ~ /^uid=/) {split($i,a,"="); uid=a[2]}} /st=.*rb=.*tb=/ && uid ~ /^[0-9]+$/ {rb=0;tb=0;for(i=1;i<=NF;i++){if($i~/^rb=/){split($i,a,"=");rb=a[2]} if($i~/^tb=/){split($i,a,"=");tb=a[2]}} total[uid]+=rb+tb} END {for(uid in total) print uid,total[uid]}'
+echo __BATTERY__; dumpsys battery; cat /sys/class/power_supply/battery/uevent 2>/dev/null; su -c cat /sys/class/power_supply/battery/uevent 2>/dev/null
+battery_stats=$(dumpsys batterystats --charged 2>/dev/null)
+echo __BATTERYSTATS__; printf '%s\n' "$battery_stats" | sed -n '/Estimated power use/,/^$/p'
+echo __BATTERYSTATS_TIME__; printf '%s\n' "$battery_stats" | grep -m1 -E 'Time on battery:'
+echo __GOVERNOR__; cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null; cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors 2>/dev/null
+echo __NETDEV__; cat /proc/net/dev
