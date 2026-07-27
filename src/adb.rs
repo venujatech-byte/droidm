@@ -1030,3 +1030,132 @@ echo __TELEPHONY__; getprop gsm.operator.alpha; getprop gsm.sim.operator.alpha; 
     let battery_charge_counter_uah = battery_uevent_val("CHARGE_COUNTER")
         .and_then(|val| val.parse::<u64>().ok())
         .or_else(|| {
+            battery_value("Charge counter:")
+                .or_else(|| battery_value("charge counter:"))
+                .and_then(|val| val.parse::<u64>().ok())
+        });
+    let battery_charge_full_uah = battery_uevent_val("CHARGE_FULL")
+        .and_then(|val| val.parse::<u64>().ok());
+    let battery_charge_full_design_uah = battery_uevent_val("CHARGE_FULL_DESIGN")
+        .and_then(|val| val.parse::<u64>().ok());
+    let battery_cycle_count = battery_uevent_val("BATTERY_CYCLE")
+        .and_then(|val| val.parse::<u64>().ok())
+        .or_else(|| {
+            battery_value("mSavedBatteryUsage:")
+                .and_then(|val| val.parse::<u64>().ok())
+                .map(|usage| usage / 100)
+        })
+        .or_else(|| battery_uevent_val("CYCLE_COUNT").and_then(|val| val.parse::<u64>().ok()));
+    let battery_technology = battery_uevent_val("TECHNOLOGY")
+        .map(str::to_string)
+        .or_else(|| battery_value("technology:").map(str::to_string))
+        .or_else(|| Some("Li-ion".to_string()));
+
+    let power_attribution = parse_power_attribution(section("BATTERYSTATS"));
+
+    let power_attribution_secs = parse_battery_time(section("BATTERYSTATS_TIME"));
+
+    let governor_lines: Vec<&str> = section("GOVERNOR").lines().map(str::trim).filter(|l| !l.is_empty()).collect();
+    let cpu_governor = governor_lines.first().map(|s| s.to_string());
+    let cpu_available_governors = governor_lines
+        .get(1)
+        .map(|s| s.split_whitespace().map(str::to_string).collect())
+        .unwrap_or_default();
+
+    let battery_health_raw = battery_uevent_val("HEALTH")
+        .or_else(|| battery_value("health:"))
+        .unwrap_or("");
+    let battery_health = match battery_health_raw {
+        "2" | "Good" | "good" => "Good",
+        "3" | "Overheat" | "overheat" => "Overheat",
+        "4" | "Dead" | "dead" => "Dead",
+        "5" | "Over voltage" | "over_voltage" => "Over Voltage",
+        "6" | "Unspecified failure" => "Failure",
+        "7" | "Cold" | "cold" => "Cold",
+        other if !other.is_empty() => other,
+        _ => "Good",
+    }.to_string();
+
+    let mut socket_total = 0;
+    let mut socket_tcp = 0;
+    let mut socket_udp = 0;
+    for line in section("SOCKSTAT").lines() {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if line.starts_with("sockets:") {
+            if parts.len() >= 3 {
+                socket_total = parts[2].parse().unwrap_or(0);
+            }
+        } else if line.starts_with("TCP:") {
+            for (i, &p) in parts.iter().enumerate() {
+                if p == "inuse" || p == "alloc" {
+                    if let Some(&val) = parts.get(i + 1) {
+                        socket_tcp = val.parse().unwrap_or(socket_tcp);
+                    }
+                }
+            }
+        } else if line.starts_with("UDP:") {
+            for (i, &p) in parts.iter().enumerate() {
+                if p == "inuse" {
+                    if let Some(&val) = parts.get(i + 1) {
+                        socket_udp = val.parse().unwrap_or(socket_udp);
+                    }
+                }
+            }
+        }
+    }
+
+    let bt_section = section("BLUETOOTH");
+    let mut bt_name = None;
+    let mut bt_address = None;
+    let mut bt_state = None;
+    let mut bt_scan_mode = None;
+    let mut bt_conn_state = None;
+    let mut bt_class = None;
+    let mut bt_uptime = None;
+    let mut bt_max_audio = None;
+    let mut bt_a2dp_offload = None;
+    let mut bt_active_dev = None;
+    let mut bt_profiles = Vec::new();
+    let mut bt_bonded = Vec::new();
+    let mut in_bonded = false;
+
+    for line in bt_section.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            if in_bonded { in_bonded = false; }
+            continue;
+        }
+
+        if trimmed.starts_with("mSnoopLog") || trimmed.starts_with("AdapterState:") {
+            in_bonded = false;
+        }
+
+        if in_bonded {
+            if trimmed.contains(':') && trimmed.len() >= 17 {
+                bt_bonded.push(trimmed.to_string());
+            }
+        }
+
+        if trimmed == "Bonded devices:" {
+            in_bonded = true;
+            continue;
+        }
+
+        if let Some(val) = trimmed.strip_prefix("name: ").or_else(|| trimmed.strip_prefix("Name: ")) {
+            if bt_name.is_none() && !val.is_empty() && val != "null" {
+                bt_name = Some(val.to_string());
+            }
+        } else if let Some(val) = trimmed.strip_prefix("address: ").or_else(|| trimmed.strip_prefix("Address: ")) {
+            if bt_address.is_none() && !val.is_empty() && val != "null" {
+                bt_address = Some(val.to_string());
+            }
+        } else if let Some(val) = trimmed.strip_prefix("state: ").or_else(|| trimmed.strip_prefix("State: ")) {
+            if bt_state.is_none() && !val.is_empty() {
+                bt_state = Some(val.to_string());
+            }
+        } else if let Some(val) = trimmed.strip_prefix("ScanMode: ") {
+            bt_scan_mode = Some(val.to_string());
+        } else if let Some(val) = trimmed.strip_prefix("ConnectionState: ") {
+            bt_conn_state = Some(val.to_string());
+        } else if let Some(val) = trimmed.strip_prefix("BluetoothClass: ") {
+            bt_class = Some(val.to_string());
