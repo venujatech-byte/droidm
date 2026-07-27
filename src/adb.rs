@@ -901,3 +901,132 @@ echo __TELEPHONY__; getprop gsm.operator.alpha; getprop gsm.sim.operator.alpha; 
                     .get(5)
                     .and_then(|value| parse_top_memory_kb(value)),
                 disk_rate_bps: disk_rates_by_pid.get(&pid).copied(),
+                network_bytes: uid_by_pid.get(&pid).and_then(|uid| network_by_uid.get(uid)).copied(),
+                gpu_memory_bytes: gpu_data_available.then(|| gpu_memory_by_pid.get(&pid).copied().unwrap_or(0)),
+            })
+        })
+        .filter(|process| !process.name.is_empty() && !process.name.starts_with("top ") && !process.name.starts_with("sh "))
+        .take(150)
+        .collect();
+    let cpu_usage_pct = section("TOP")
+        .lines()
+        .find(|line| line.to_ascii_lowercase().contains("%cpu"))
+        .and_then(|line| {
+            let columns: Vec<&str> = line.split_whitespace().collect();
+            let total = columns.first()?.trim_end_matches("%cpu").parse::<f32>().ok()?;
+            let idle = columns.iter().find_map(|part| {
+                part.strip_suffix("%idle")?.parse::<f32>().ok()
+            })?;
+            (total > 0.0).then_some((((total - idle) / total * 100.0).clamp(0.0, 100.0) * 10.0).round() / 10.0)
+        });
+
+    let network_interfaces = section("NETDEV")
+        .lines()
+        .skip(2)
+        .filter_map(|line| {
+            let (name, counters) = line.split_once(':')?;
+            let counters: Vec<&str> = counters.split_whitespace().collect();
+            Some(AdbNetworkInterface {
+                name: name.trim().to_string(),
+                rx_bytes: counters.first()?.parse().ok()?,
+                tx_bytes: counters.get(8)?.parse().ok()?,
+            })
+        })
+        .collect();
+
+    let disk_counters = section("DISKSTATS")
+        .lines()
+        .filter_map(|line| {
+            let fields: Vec<&str> = line.split_whitespace().collect();
+            let name = *fields.get(2)?;
+            Some(AdbDiskCounters {
+                name: name.to_string(),
+                read_sectors: fields.get(5)?.parse().ok()?,
+                written_sectors: fields.get(9)?.parse().ok()?,
+            })
+        })
+        .collect();
+    let mut storage_internal = None;
+    let mut storage_shared = None;
+    for line in section("DF").lines() {
+        let Some((mount, total, free)) = parse_android_df_line(line) else { continue; };
+        if mount.starts_with("/data") && storage_internal.is_none() {
+            storage_internal = Some((total, free));
+        } else if mount.starts_with("/storage/emulated") && storage_shared.is_none() {
+            storage_shared = Some((total, free));
+        }
+    }
+
+    let temperatures = section("THERMAL_ZONES").lines().filter_map(|line| {
+        let (name, value) = line.rsplit_once(char::is_whitespace)?;
+        let mut temp_c = value.trim().parse::<f32>().ok()?;
+        if temp_c.abs() > 200.0 {
+            temp_c /= 1000.0;
+        }
+        temp_c = (temp_c * 10.0).round() / 10.0;
+        Some(AdbTemperatureSensor {
+            name: if name.trim().is_empty() { "Thermal zone" } else { name.trim() }.to_string(),
+            temp_c,
+        })
+    }).collect();
+
+    let parse_toggle = |name: &str| {
+        let raw = section(name).trim();
+        match raw {
+            "1" => Some(true),
+            "0" => Some(false),
+            _ if raw.lines().any(|line| line.trim() == "enabled: true" || line.trim() == "state: ON") => Some(true),
+            _ if raw.lines().any(|line| line.trim() == "enabled: false" || line.trim() == "state: OFF") => Some(false),
+            _ => None,
+        }
+    };
+    let battery_uevent_val = |key: &str| {
+        section("BATTERY")
+            .lines()
+            .find_map(|line| line.trim().strip_prefix(&format!("POWER_SUPPLY_{key}=")))
+            .map(str::trim)
+    };
+    let battery_value = |prefix: &str| {
+        section("BATTERY")
+            .lines()
+            .find_map(|line| line.trim().strip_prefix(prefix))
+            .map(str::trim)
+    };
+    let gpu: Vec<&str> = section("GPU").lines().map(str::trim).filter(|line| !line.is_empty()).collect();
+    let battery_plugged = ["AC", "USB", "Wireless"]
+        .iter()
+        .find(|source| battery_value(&format!("{source} powered:")) == Some("true"))
+        .map(|source| source.to_string())
+        .unwrap_or_else(|| "Not charging".to_string());
+    let uptime_secs = section("UPTIME")
+        .split_whitespace()
+        .next()
+        .and_then(|value| value.parse::<f64>().ok())
+        .map(|seconds| seconds as u64);
+    let battery_status = battery_value("status:")
+        .and_then(|status| match status {
+            "2" => Some("Charging"),
+            "3" => Some("Discharging"),
+            "4" => Some("Not charging"),
+            "5" => Some("Full"),
+            _ => None,
+        })
+        .or_else(|| battery_uevent_val("STATUS").map(|s| match s {
+            "Charging" => "Charging",
+            "Discharging" => "Discharging",
+            "Not charging" => "Not charging",
+            "Full" => "Full",
+            other => other,
+        }))
+        .unwrap_or("Unavailable")
+        .to_string();
+
+    let battery_current_ua = battery_uevent_val("CURRENT_NOW")
+        .and_then(|val| val.parse::<i64>().ok())
+        .or_else(|| {
+            battery_value("current now:")
+                .and_then(|val| val.parse::<i64>().ok())
+        });
+    let battery_charge_counter_uah = battery_uevent_val("CHARGE_COUNTER")
+        .and_then(|val| val.parse::<u64>().ok())
+        .or_else(|| {
