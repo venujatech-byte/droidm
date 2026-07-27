@@ -1159,3 +1159,132 @@ echo __TELEPHONY__; getprop gsm.operator.alpha; getprop gsm.sim.operator.alpha; 
             bt_conn_state = Some(val.to_string());
         } else if let Some(val) = trimmed.strip_prefix("BluetoothClass: ") {
             bt_class = Some(val.to_string());
+        } else if let Some(val) = trimmed.strip_prefix("time since enabled: ") {
+            bt_uptime = Some(val.to_string());
+        } else if let Some(val) = trimmed.strip_prefix("MaxConnectedAudioDevices: ") {
+            bt_max_audio = val.parse::<u32>().ok();
+        } else if let Some(val) = trimmed.strip_prefix("A2dpOffloadEnabled: ") {
+            bt_a2dp_offload = match val {
+                "true" => Some(true),
+                "false" => Some(false),
+                _ => None,
+            };
+        } else if let Some(val) = trimmed.strip_prefix("mActiveDevice: ") {
+            if val != "null" && !val.is_empty() && bt_active_dev.is_none() {
+                bt_active_dev = Some(val.to_string());
+            }
+        } else if let Some(val) = trimmed.strip_prefix("Profile: ") {
+            let prof = val.trim_end_matches(':').trim();
+            if !prof.is_empty() && !bt_profiles.contains(&prof.to_string()) {
+                bt_profiles.push(prof.to_string());
+            }
+        }
+    }
+
+    Ok(AdbDeviceSensors {
+        cpu_model,
+        cpu_cores,
+        cpu_usage_pct,
+        cpu_counters,
+        cpu_frequencies_mhz,
+        top_processes,
+        mem_total_kb: mem_value("MemTotal"),
+        mem_available_kb: mem_value("MemAvailable"),
+        mem_free_kb: mem_value("MemFree"),
+        mem_buffers_kb: mem_value("Buffers"),
+        mem_cached_kb: mem_value("Cached"),
+        mem_dirty_kb: mem_value("Dirty"),
+        swap_total_kb: mem_value("SwapTotal"),
+        swap_free_kb: mem_value("SwapFree"),
+        storage_internal_total_kb: storage_internal.map(|(total, _)| total),
+        storage_internal_free_kb: storage_internal.map(|(_, free)| free),
+        storage_shared_total_kb: storage_shared.map(|(total, _)| total),
+        storage_shared_free_kb: storage_shared.map(|(_, free)| free),
+        disk_counters,
+        gpu_renderer: gpu.first().copied().unwrap_or("").to_string(),
+        gpu_platform: gpu.get(1).copied().unwrap_or("").to_string(),
+        battery_voltage_mv: battery_value("voltage:")
+            .and_then(|value| value.parse().ok())
+            .or_else(|| battery_uevent_val("VOLTAGE_NOW").and_then(|v| v.parse::<u64>().ok()).map(|uv| uv / 1000)),
+        battery_health,
+        battery_plugged,
+        battery_pct: battery_value("level:")
+            .and_then(|value| value.parse().ok())
+            .or_else(|| battery_uevent_val("CAPACITY").and_then(|v| v.parse().ok())),
+        battery_status,
+        battery_temp_c: battery_value("temperature:")
+            .and_then(|value| value.parse::<f32>().ok())
+            .or_else(|| battery_uevent_val("TEMP").and_then(|v| v.parse::<f32>().ok()))
+            .map(|value| {
+                let temp = if value.abs() > 150.0 { value / 10.0 } else { value };
+                (temp * 10.0).round() / 10.0
+            }),
+        battery_current_ua,
+        battery_charge_counter_uah,
+        battery_charge_full_uah,
+        battery_charge_full_design_uah,
+        battery_cycle_count,
+        battery_technology,
+        cpu_governor,
+        cpu_available_governors,
+        power_attribution,
+        power_attribution_secs,
+        wifi_enabled: parse_toggle("WIFI"),
+        bluetooth_enabled: parse_toggle("BLUETOOTH"),
+        bluetooth_name: bt_name,
+        bluetooth_address: bt_address,
+        bluetooth_state: bt_state,
+        bluetooth_scan_mode: bt_scan_mode,
+        bluetooth_connection_state: bt_conn_state,
+        bluetooth_class: bt_class,
+        bluetooth_uptime: bt_uptime,
+        bluetooth_max_audio_devices: bt_max_audio,
+        bluetooth_a2dp_offload: bt_a2dp_offload,
+        bluetooth_active_device: bt_active_dev,
+        bluetooth_profiles: bt_profiles,
+        bluetooth_bonded_devices: bt_bonded,
+        network_interfaces,
+        temperatures,
+        sensor_names: Vec::new(),
+        uptime_secs,
+        socket_total,
+        socket_tcp,
+        socket_udp,
+        cellular_operator: section("TELEPHONY").lines().next().unwrap_or("").trim().to_string(),
+        sim_operator: section("TELEPHONY").lines().nth(1).unwrap_or("").trim().to_string(),
+        sim_state: section("TELEPHONY").lines().nth(2).unwrap_or("").trim().to_string(),
+        cellular_network_type: section("TELEPHONY").lines().nth(3).unwrap_or("").trim().to_string(),
+        cellular_numeric: section("TELEPHONY").lines().nth(4).unwrap_or("").trim().to_string(),
+        cellular_country: section("TELEPHONY").lines().nth(5).unwrap_or("").trim().to_string(),
+        sim_slots: parse_sim_slots(
+            section("TELEPHONY").lines().nth(1).unwrap_or(""),
+            section("TELEPHONY").lines().nth(2).unwrap_or(""),
+            section("TELEPHONY").lines().nth(3).unwrap_or(""),
+            section("TELEPHONY").lines().nth(4).unwrap_or(""),
+            section("TELEPHONY").lines().nth(5).unwrap_or(""),
+        ),
+        baseband_version: section("TELEPHONY").lines().nth(6).unwrap_or("").trim().to_string(),
+        ril_impl: section("TELEPHONY").lines().nth(7).unwrap_or("").trim().to_string(),
+        mobile_data_enabled: section("TELEPHONY").lines().nth(8).and_then(|v| match v.trim() {
+            "1" | "true" => Some(true),
+            "0" | "false" => Some(false),
+            _ => None,
+        }),
+        data_roaming_enabled: section("TELEPHONY").lines().nth(9).and_then(|v| match v.trim() {
+            "1" | "true" => Some(true),
+            "0" | "false" => Some(false),
+            _ => None,
+        }),
+    })
+}
+
+/// Loads the mostly static Android sensor inventory only when its view is opened.
+pub fn query_device_sensor_inventory(serial: &str) -> Result<Vec<String>, String> {
+    static CACHE: OnceLock<Mutex<HashMap<String, Vec<String>>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Some(sensors) = cache.lock().map_err(|e| e.to_string())?.get(serial).cloned() {
+        return Ok(sensors);
+    }
+
+    let output = adb_cmd(
+        Some(serial),
