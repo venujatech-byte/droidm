@@ -772,3 +772,132 @@ echo __BATTERYSTATS__; printf '%s\n' "$battery_stats" | sed -n '/Estimated power
 echo __BATTERYSTATS_TIME__; printf '%s\n' "$battery_stats" | grep -m1 -E 'Time on battery:'
 echo __GOVERNOR__; cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null; cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors 2>/dev/null
 echo __NETDEV__; cat /proc/net/dev
+echo __DISKSTATS__; cat /proc/diskstats
+echo __DF__; df -k /data 2>/dev/null; df -k /storage/emulated/0 2>/dev/null; df -k /sdcard 2>/dev/null
+echo __THERMAL_ZONES__; for zone in /sys/class/thermal/thermal_zone*; do if [ -r "$zone/temp" ]; then printf '%s ' "$(cat "$zone/type" 2>/dev/null)"; cat "$zone/temp"; fi; done
+echo __WIFI__; settings get global wifi_on
+echo __BLUETOOTH__; settings get global bluetooth_on; dumpsys bluetooth_manager 2>/dev/null | sed -n '1,/^AdapterState:/p'; dumpsys bluetooth_manager 2>/dev/null | grep -E -m 20 '(Profile: |  mActiveDevice:)'
+echo __GPU__; getprop ro.hardware.egl; getprop ro.board.platform
+echo __SOCKSTAT__; cat /proc/net/sockstat
+echo __UPTIME__; cat /proc/uptime
+echo __TELEPHONY__; getprop gsm.operator.alpha; getprop gsm.sim.operator.alpha; getprop gsm.sim.state; getprop gsm.network.type; getprop gsm.operator.numeric; getprop gsm.operator.iso-country; getprop gsm.version.baseband; getprop gsm.version.ril-impl; settings get global mobile_data 2>/dev/null; settings get global data_roaming 2>/dev/null
+"#;
+    let output = adb_cmd(Some(serial), &["shell", script])?;
+    let mut sections = HashMap::new();
+    let mut current = "";
+    for line in output.lines() {
+        if let Some(name) = line.strip_prefix("__").and_then(|line| line.strip_suffix("__")) {
+            current = name;
+            sections.entry(current).or_insert_with(String::new);
+        } else if !current.is_empty() {
+            let section: &mut String = sections.get_mut(current).expect("section was inserted");
+            section.push_str(line);
+            section.push('\n');
+        }
+    }
+    let section = |name: &str| sections.get(name).map(String::as_str).unwrap_or("");
+
+    let mem_value = |name: &str| {
+        section("MEMINFO")
+            .lines()
+            .find_map(|line| line.strip_prefix(&format!("{name}:")))
+            .and_then(|value| value.split_whitespace().next())
+            .and_then(|value| value.parse::<u64>().ok())
+    };
+    let cpu_lines: Vec<&str> = section("CPUINFO").lines().collect();
+    let cpu_model = ["Hardware", "model name", "Processor"]
+        .iter()
+        .find_map(|key| {
+            cpu_lines.iter().find_map(|line| {
+                let (name, value) = line.split_once(':')?;
+                name.trim().eq_ignore_ascii_case(key).then_some(value.trim())
+            })
+        })
+        .unwrap_or("")
+        .to_string();
+    let cpu_cores = cpu_lines
+        .iter()
+        .filter(|line| line.trim_start().starts_with("processor"))
+        .count();
+    let cpu_counters = section("CPU_STAT")
+        .lines()
+        .filter_map(|line| {
+            let mut fields = line.split_whitespace();
+            let name = fields.next()?;
+            if !name.starts_with("cpu") {
+                return None;
+            }
+            let values: Vec<u64> = fields.filter_map(|field| field.parse().ok()).collect();
+            let idle = *values.get(3)? + values.get(4).copied().unwrap_or(0);
+            Some(AdbCpuCounters {
+                name: name.to_string(),
+                total: values.iter().sum(),
+                idle,
+            })
+        })
+        .collect();
+    let cpu_frequencies_mhz = section("CPU_FREQ")
+        .lines()
+        .filter_map(|line| line.trim().parse::<u64>().ok())
+        .map(|khz| khz / 1000)
+        .collect();
+
+    let uid_by_pid: HashMap<u32, u32> = section("PROCESS_UID")
+        .lines()
+        .skip(1)
+        .filter_map(|line| {
+            let mut fields = line.split_whitespace();
+            Some((fields.next()?.parse().ok()?, fields.next()?.parse().ok()?))
+        })
+        .collect();
+    let network_by_uid: HashMap<u32, u64> = section("NET_UID")
+        .lines()
+        .filter_map(|line| {
+            let mut fields = line.split_whitespace();
+            Some((fields.next()?.parse().ok()?, fields.next()?.parse().ok()?))
+        })
+        .collect();
+    let disk_counters_by_pid: HashMap<u32, (u64, u64)> = section("PROC_IO")
+        .lines()
+        .filter_map(|line| {
+            let mut fields = line.split_whitespace();
+            Some((fields.next()?.parse().ok()?, (fields.next()?.parse().ok()?, fields.next()?.parse().ok()?)))
+        })
+        .collect();
+    let disk_rates_by_pid = process_disk_rates(serial, &disk_counters_by_pid);
+    let gpu_section = section("GPU_MEM");
+    let gpu_data_available = gpu_section.lines().any(|line| line.trim() == "AVAILABLE");
+    let mut gpu_memory_by_pid = HashMap::<u32, u64>::new();
+    let mut gpu_pid = None;
+    for line in gpu_section.lines() {
+        let line = line.trim();
+        if let Some(pid) = line.strip_prefix("GPU_PID ").and_then(|pid| pid.parse::<u32>().ok()) {
+            gpu_pid = Some(pid);
+        } else if let (Some(pid), Some(bytes)) = (gpu_pid, line.split_whitespace().nth(2).and_then(|value| value.parse::<u64>().ok())) {
+            *gpu_memory_by_pid.entry(pid).or_default() += bytes;
+        }
+    }
+
+    let top_processes = section("TOP")
+        .lines()
+        .filter_map(|line| {
+            let columns: Vec<&str> = line.split_whitespace().collect();
+            let pid = columns.first()?.parse::<u32>().ok()?;
+            if columns.len() < 9 {
+                return None;
+            }
+            let cpu_pct = columns[8]
+                .trim_end_matches('%')
+                .parse::<f32>()
+                .ok()
+                .map(|p| (p * 10.0).round() / 10.0);
+            Some(AdbSensorProcess {
+                pid,
+                uid: uid_by_pid.get(&pid).copied(),
+                name: columns.get(11..).unwrap_or(&[]).join(" ").trim().to_string(),
+                cpu_pct,
+                memory: columns.get(5).copied().unwrap_or("").to_string(),
+                memory_kb: columns
+                    .get(5)
+                    .and_then(|value| parse_top_memory_kb(value)),
+                disk_rate_bps: disk_rates_by_pid.get(&pid).copied(),
