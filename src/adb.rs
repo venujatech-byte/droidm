@@ -1417,3 +1417,132 @@ pub fn take_screenshot(serial: &str, dest_path: &Path) -> Result<(), String> {
     if !serial.is_empty() {
         cmd.arg("-s").arg(serial);
     }
+    cmd.args(["exec-out", "screencap", "-p"]);
+
+    match cmd.output() {
+        Ok(out) => {
+            if out.status.success() && !out.stdout.is_empty() {
+                if let Err(e) = std::fs::write(dest_path, &out.stdout) {
+                    Err(format!("Failed to save screenshot: {}", e))
+                } else {
+                    Ok(())
+                }
+            } else {
+                Err("Failed to capture screen: empty or error output".to_string())
+            }
+        }
+        Err(e) => Err(format!("Failed to execute screencap: {}", e)),
+    }
+}
+
+/// Retrieves the current text from the device clipboard.
+pub fn get_clipboard(serial: &str) -> Result<String, String> {
+    // 1. Try modern Android `cmd clipboard get`
+    if let Ok(res) = adb_cmd(Some(serial), &["shell", "cmd", "clipboard", "get"]) {
+        if !res.is_empty() && !res.to_lowercase().contains("error") {
+            return Ok(res);
+        }
+    }
+
+    // 2. Fallback service call or dumpsys clipboard
+    if let Ok(dumpsys) = adb_cmd(Some(serial), &["shell", "dumpsys", "clipboard"]) {
+        for line in dumpsys.lines() {
+            if line.contains("text=") {
+                if let Some(txt) = line.split("text=").nth(1) {
+                    return Ok(txt.trim_matches(|c| c == '}' || c == '"' || c == ' ').to_string());
+                }
+            }
+        }
+    }
+
+    Err("Clipboard is empty or Android clipboard service is restricted".to_string())
+}
+
+/// Injects text into the device clipboard.
+pub fn set_clipboard(serial: &str, text: &str) -> Result<(), String> {
+    // Modern Android: `cmd clipboard set <text>`
+    if let Ok(_) = adb_cmd(Some(serial), &["shell", "cmd", "clipboard", "set", text]) {
+        return Ok(());
+    }
+
+    // Fallback: inject via input text
+    send_text(serial, text)
+}
+
+/// Spawns `scrcpy` in the background targeting this specific device serial with optional parameters.
+pub fn launch_scrcpy(
+    serial: &str,
+    stay_awake: bool,
+    turn_screen_off: bool,
+    no_audio: bool,
+    max_fps: Option<u32>,
+    bitrate_mbps: Option<u32>,
+) -> Result<u32, String> {
+    let mut cmd = Command::new("scrcpy");
+    if !serial.is_empty() {
+        cmd.arg("-s").arg(serial);
+    }
+    if stay_awake {
+        cmd.arg("--stay-awake");
+    }
+    if turn_screen_off {
+        cmd.arg("--turn-screen-off");
+    }
+    if no_audio {
+        cmd.arg("--no-audio");
+    }
+    if let Some(fps) = max_fps {
+        cmd.arg(format!("--max-fps={}", fps));
+    }
+    if let Some(br) = bitrate_mbps {
+        cmd.arg(format!("--video-bit-rate={}M", br));
+    }
+
+    cmd.stdin(Stdio::null());
+    cmd.stdout(Stdio::null());
+    cmd.stderr(Stdio::null());
+
+    match cmd.spawn() {
+        Ok(child) => Ok(child.id()),
+        Err(e) => Err(format!("Failed to launch scrcpy: {}. Ensure scrcpy is installed.", e)),
+    }
+}
+
+/// Terminates a running scrcpy process by PID.
+pub fn stop_scrcpy(pid: u32) {
+    #[cfg(unix)]
+    {
+        unsafe {
+            libc::kill(pid as i32, libc::SIGTERM);
+        }
+    }
+}
+
+/// Checks if a scrcpy process is still actively running.
+pub fn is_scrcpy_running(pid: u32) -> bool {
+    #[cfg(unix)]
+    {
+        unsafe { libc::kill(pid as i32, 0) == 0 }
+    }
+    #[cfg(not(unix))]
+    {
+        true
+    }
+}
+
+/// Lists installed packages on device (third-party or system).
+pub fn list_packages(serial: &str, third_party_only: bool) -> Vec<AdbPackageInfo> {
+    let flag = if third_party_only { "-3" } else { "-s" };
+    let mut list = Vec::new();
+
+    if let Ok(out) = adb_cmd(Some(serial), &["shell", "pm", "list", "packages", flag]) {
+        for line in out.lines() {
+            if let Some(pkg) = line.trim().strip_prefix("package:") {
+                list.push(AdbPackageInfo {
+                    name: pkg.trim().to_string(),
+                    is_system: !third_party_only,
+                });
+            }
+        }
+    }
+
