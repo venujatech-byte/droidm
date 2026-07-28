@@ -1675,3 +1675,132 @@ pub fn list_directory(serial: &str, remote_path: &str) -> Result<Vec<AdbFileEntr
 
 /// Lists user-browsable storage volumes, collapsing duplicate aliases of the emulated volume.
 pub fn list_storage_volumes(serial: &str) -> Vec<(String, String, u64, u64)> {
+    let mounts = adb_cmd(Some(serial), &["shell", "ls", "-1", "/storage"]).unwrap_or_default();
+    let mut paths = vec![("Internal storage".to_string(), "/storage/emulated/0".to_string())];
+    paths.extend(mounts.lines().map(str::trim)
+        .filter(|name| !name.is_empty() && *name != "emulated" && *name != "self" && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'))
+        .map(|name| ("SD card".to_string(), format!("/storage/{name}"))));
+    let mut volumes = Vec::new();
+    for (name, path) in paths {
+        let output = adb_cmd(Some(serial), &["shell", "df", "-k", &path]).unwrap_or_default();
+        if let Some(fields) = output.lines().skip(1).map(|line| line.split_whitespace().collect::<Vec<_>>()).find(|fields| fields.len() >= 5) {
+            if let (Ok(total), Ok(free)) = (fields[1].parse(), fields[3].parse()) {
+                volumes.push((name, path, total, free));
+            }
+        }
+    }
+    volumes
+}
+
+/// Deletes a file or directory on the device.
+pub fn delete_file(serial: &str, remote_path: &str) -> Result<(), String> {
+    adb_cmd(Some(serial), &["shell", "rm", "-rf", remote_path]).map(|_| ())
+}
+
+/// Pushes a local file or directory to a remote path on the device.
+pub fn push_file(serial: &str, local_path: &Path, remote_path: &str) -> Result<String, String> {
+    let local_str = local_path.to_string_lossy().to_string();
+    adb_cmd(Some(serial), &["push", &local_str, remote_path])
+}
+
+/// Pulls a remote file from the device to a local destination directory or file.
+pub fn pull_file(serial: &str, remote_path: &str, local_dest: &Path) -> Result<String, String> {
+    let local_str = local_dest.to_string_lossy().to_string();
+    adb_cmd(Some(serial), &["pull", remote_path, &local_str])
+}
+
+/// Pulls a remote file or folder without overwriting an existing local item.
+pub fn pull_file_to_path(serial: &str, remote_path: &str, local_path: &Path) -> Result<String, String> {
+    if local_path.exists() {
+        return Err(format!("{} already exists", local_path.display()));
+    }
+    pull_file(serial, remote_path, local_path)
+}
+
+/// Pulls a remote folder into a local directory without overwriting an existing folder.
+pub fn pull_directory_to_directory(serial: &str, remote_path: &str, local_dir: &Path) -> Result<String, String> {
+    let name = Path::new(remote_path).file_name().ok_or_else(|| "Invalid device path".to_string())?;
+    let destination = local_dir.join(name);
+    if destination.exists() {
+        return Err(format!("{} already exists", destination.display()));
+    }
+    pull_file(serial, remote_path, &destination)
+}
+
+/// Reboots device to a specific target: "recovery", "bootloader", "fastboot", "edl", or normal system.
+pub fn reboot_device(serial: &str, target: &str) -> Result<String, String> {
+    let target = target.trim();
+    if target.is_empty() || target == "system" {
+        adb_cmd(Some(serial), &["reboot"])
+    } else {
+        adb_cmd(Some(serial), &["reboot", target])
+    }
+}
+
+/// Sideloads an OTA update package zip in recovery mode (`adb sideload <file.zip>`).
+pub fn sideload_ota(serial: &str, zip_path: &Path) -> Result<String, String> {
+    let zip_str = zip_path.to_string_lossy().to_string();
+    adb_cmd(Some(serial), &["sideload", &zip_str])
+}
+
+/// Generates a full Android bugreport archive to the host filesystem.
+pub fn generate_bugreport(serial: &str, dest_zip: &Path) -> Result<String, String> {
+    let dest_str = dest_zip.to_string_lossy().to_string();
+    adb_cmd(Some(serial), &["bugreport", &dest_str])
+}
+
+/// Checks attached fastboot devices.
+pub fn list_fastboot_devices() -> Vec<String> {
+    let mut list = Vec::new();
+    let mut cmd = Command::new("fastboot");
+    cmd.arg("devices");
+    if let Ok(out) = cmd.output() {
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        for line in stdout.lines() {
+            if let Some(serial) = line.split_whitespace().next() {
+                list.push(serial.to_string());
+            }
+        }
+    }
+    list
+}
+
+/// Flashes a partition image via Fastboot (e.g. `boot`, `recovery`, `init_boot`).
+pub fn fastboot_flash(partition: &str, img_path: &Path) -> Result<String, String> {
+    let img_str = img_path.to_string_lossy().to_string();
+    let mut cmd = Command::new("fastboot");
+    cmd.args(["flash", partition, &img_str]);
+
+    match cmd.output() {
+        Ok(out) => {
+            let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+            let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+            if out.status.success() {
+                Ok(stdout.trim().to_string())
+            } else {
+                Err(format!("Fastboot error: {}", stderr.trim()))
+            }
+        }
+        Err(e) => Err(format!("Failed to execute fastboot: {}", e)),
+    }
+}
+
+/// Launches an external host terminal running an interactive `adb -s <serial> shell`.
+pub fn launch_external_adb_terminal(serial: &str) -> Result<(), String> {
+    let script_dir = std::env::temp_dir();
+    let safe_serial = if serial.trim().is_empty() {
+        "default".to_string()
+    } else {
+        serial.replace(['.', ':', '-'], "_")
+    };
+    let script_path = script_dir.join(format!("launcher_adb_shell_{}.sh", safe_serial));
+
+    let adb_target = if serial.trim().is_empty() {
+        "adb shell".to_string()
+    } else {
+        format!("adb -s \"{}\" shell", serial.trim())
+    };
+
+    let script_content = format!(
+r#"#!/usr/bin/env bash
+echo "=========================================================="
