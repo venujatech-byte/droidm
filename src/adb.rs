@@ -1546,3 +1546,132 @@ pub fn list_packages(serial: &str, third_party_only: bool) -> Vec<AdbPackageInfo
         }
     }
 
+    list.sort_by(|a, b| a.name.cmp(&b.name));
+    list
+}
+
+/// Launches an application by package name using the Android monkey tool.
+pub fn launch_app(serial: &str, package: &str) -> Result<(), String> {
+    adb_cmd(Some(serial), &["shell", "monkey", "-p", package, "-c", "android.intent.category.LAUNCHER", "1"]).map(|_| ())
+}
+
+/// Force-stops an application by package name.
+pub fn force_stop_app(serial: &str, package: &str) -> Result<(), String> {
+    adb_cmd(Some(serial), &["shell", "am", "force-stop", package]).map(|_| ())
+}
+
+/// Clears application data and cache.
+pub fn clear_app_data(serial: &str, package: &str) -> Result<(), String> {
+    adb_cmd(Some(serial), &["shell", "pm", "clear", package]).map(|_| ())
+}
+
+/// Uninstalls an application.
+pub fn uninstall_app(serial: &str, package: &str) -> Result<(), String> {
+    adb_cmd(Some(serial), &["shell", "pm", "uninstall", package]).map(|_| ())
+}
+
+/// Installs an APK from the host file system.
+pub fn install_apk(serial: &str, apk_path: &Path) -> Result<String, String> {
+    let path_str = apk_path.to_string_lossy().to_string();
+    adb_cmd(Some(serial), &["install", "-r", "-d", &path_str])
+}
+
+/// Captures the device screen and returns raw PNG bytes in memory.
+pub fn capture_screen_raw(serial: &str) -> Result<Vec<u8>, String> {
+    let mut cmd = Command::new("adb");
+    if !serial.is_empty() {
+        cmd.arg("-s").arg(serial);
+    }
+    cmd.args(["exec-out", "screencap", "-p"]);
+
+    match cmd.output() {
+        Ok(out) => {
+            if out.status.success() && !out.stdout.is_empty() {
+                Ok(out.stdout)
+            } else {
+                Err("Failed to capture screen: empty or error output".to_string())
+            }
+        }
+        Err(e) => Err(format!("Failed to execute screencap: {}", e)),
+    }
+}
+
+/// Sends a simulated tap at device coordinates (x, y).
+pub fn send_tap(serial: &str, x: i32, y: i32) -> Result<(), String> {
+    let xs = x.to_string();
+    let ys = y.to_string();
+    adb_cmd(Some(serial), &["shell", "input", "tap", &xs, &ys]).map(|_| ())
+}
+
+/// Sends a simulated swipe from (x1, y1) to (x2, y2) over duration_ms.
+pub fn send_swipe(serial: &str, x1: i32, y1: i32, x2: i32, y2: i32, duration_ms: u32) -> Result<(), String> {
+    let x1s = x1.to_string();
+    let y1s = y1.to_string();
+    let x2s = x2.to_string();
+    let y2s = y2.to_string();
+    let ds = duration_ms.to_string();
+    adb_cmd(Some(serial), &["shell", "input", "swipe", &x1s, &y1s, &x2s, &y2s, &ds]).map(|_| ())
+}
+
+/// Lists files in an Android directory.
+pub fn list_directory(serial: &str, remote_path: &str) -> Result<Vec<AdbFileEntry>, String> {
+    let clean_path = if remote_path.is_empty() {
+        "/sdcard/".to_string()
+    } else if remote_path.ends_with('/') {
+        remote_path.to_string()
+    } else {
+        format!("{}/", remote_path)
+    };
+
+    let out = adb_cmd(Some(serial), &["shell", "ls", "-la", &clean_path])?;
+    let mut entries = Vec::new();
+
+    for line in out.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("total ") || trimmed.is_empty() {
+            continue;
+        }
+
+        let parts: Vec<&str> = trimmed.split_whitespace().collect();
+        if parts.len() < 7 {
+            continue;
+        }
+
+        let perms = parts[0];
+        let is_dir = perms.starts_with('d') || perms.starts_with('l');
+        let size_bytes = parts.get(4).and_then(|s| s.parse::<u64>().ok()).unwrap_or(0);
+
+        // Filename is from index 7 onwards (to preserve spaces in filenames)
+        // If there is a symlink "name -> target", extract the link's name
+        let raw_name = parts[7..].join(" ");
+        let name = if let Some((link_name, _)) = raw_name.split_once(" -> ") {
+            link_name.trim().to_string()
+        } else {
+            raw_name
+        };
+
+        if name == "." || name == ".." {
+            continue;
+        }
+
+        let modified = if parts.len() >= 7 {
+            format!("{} {}", parts[5], parts[6])
+        } else {
+            String::new()
+        };
+
+        entries.push(AdbFileEntry {
+            name,
+            is_dir,
+            size_bytes,
+            permissions: perms.to_string(),
+            modified,
+        });
+    }
+
+    entries.sort_by(|a, b| b.is_dir.cmp(&a.is_dir).then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase())));
+    Ok(entries)
+}
+
+/// Lists user-browsable storage volumes, collapsing duplicate aliases of the emulated volume.
+pub fn list_storage_volumes(serial: &str) -> Vec<(String, String, u64, u64)> {
