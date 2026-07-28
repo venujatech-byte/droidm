@@ -1288,3 +1288,132 @@ pub fn query_device_sensor_inventory(serial: &str) -> Result<Vec<String>, String
 
     let output = adb_cmd(
         Some(serial),
+        &[
+            "shell",
+            "dumpsys sensorservice | sed -n '/Sensor List:/,/Fusion States:/p'; echo __FEATURES__; pm list features 2>/dev/null | grep -F android.hardware.fingerprint || true",
+        ],
+    )?;
+    let sensors = parse_sensor_inventory(&output);
+    cache.lock().map_err(|e| e.to_string())?.insert(serial.to_string(), sensors.clone());
+    Ok(sensors)
+}
+
+pub fn query_device_sensor_readings(serial: &str) -> Result<Vec<AdbSensorReading>, String> {
+    let output = adb_cmd(Some(serial), &["shell", "dumpsys sensorservice"])?;
+    Ok(parse_sensor_readings(&output))
+}
+
+fn parse_sensor_readings(output: &str) -> Vec<AdbSensorReading> {
+    let mut readings: Vec<AdbSensorReading> = Vec::new();
+    let mut current: Option<String> = None;
+    let mut in_events = false;
+    for line in output.lines() {
+        let line = line.trim();
+        if line == "Recent Sensor events:" {
+            in_events = true;
+            continue;
+        }
+        if !in_events { continue; }
+        if line == "Active sensors:" { break; }
+        if let Some((name, _)) = line.split_once(": last ") {
+            current = Some(name.trim().to_string());
+            continue;
+        }
+        let (Some(name), Some((metadata, values))) = (current.as_ref(), line.split_once(") ")) else { continue; };
+        let Some(time) = metadata.split_once("wall=").map(|(_, time)| time.trim()) else { continue; };
+        let values: Vec<f64> = values.split(',').filter_map(|value| value.trim().parse::<f64>().ok()).collect();
+        if values.is_empty() { continue; }
+        if let Some(reading) = readings.iter_mut().find(|reading| reading.name == *name) {
+            reading.values = values;
+            reading.time = time.to_string();
+        } else {
+            readings.push(AdbSensorReading { name: name.clone(), values, time: time.to_string() });
+        }
+    }
+    readings
+}
+
+fn parse_sensor_inventory(output: &str) -> Vec<String> {
+    output
+        .lines()
+        .filter_map(|line| {
+            let line = line.trim();
+            if line.starts_with("feature:android.hardware.fingerprint") {
+                return Some("Fingerprint authentication".to_string());
+            }
+            if line.starts_with("0x") || line.starts_with("Handle ") {
+                let name = line
+                    .split_once(')')
+                    .map(|(_, name)| name.split('|').next().unwrap_or(name).trim())
+                    .filter(|name| !name.is_empty())
+                    .or_else(|| line.split_once(':').map(|(_, name)| name.trim()))?;
+                (!name.is_empty()).then(|| name.to_string())
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+fn parse_top_memory_kb(value: &str) -> Option<u64> {
+    let value = value.trim();
+    let (number, multiplier) = match value.chars().last()? {
+        'K' | 'k' => (&value[..value.len() - 1], 1.0),
+        'M' | 'm' => (&value[..value.len() - 1], 1024.0),
+        'G' | 'g' => (&value[..value.len() - 1], 1024.0 * 1024.0),
+        _ => (value, 1.0 / 1024.0),
+    };
+    number
+        .parse::<f64>()
+        .ok()
+        .map(|value| (value * multiplier) as u64)
+}
+
+fn process_disk_rates(serial: &str, counters: &HashMap<u32, (u64, u64)>) -> HashMap<u32, f64> {
+    static PREVIOUS: OnceLock<Mutex<HashMap<(String, u32), (u64, Instant)>>> = OnceLock::new();
+    let previous = PREVIOUS.get_or_init(|| Mutex::new(HashMap::new()));
+    let now = Instant::now();
+    let mut previous = previous.lock().unwrap_or_else(|error| error.into_inner());
+    previous.retain(|(device, pid), _| device != serial || counters.contains_key(pid));
+    counters.iter().filter_map(|(&pid, &(read, written))| {
+        let total = read.saturating_add(written);
+        let key = (serial.to_string(), pid);
+        let rate = previous.get(&key).and_then(|(old_total, old_time)| {
+            let elapsed = now.duration_since(*old_time).as_secs_f64();
+            (elapsed > 0.0 && total >= *old_total).then_some((total - old_total) as f64 / elapsed)
+        });
+        previous.insert(key, (total, now));
+        rate.map(|rate| (pid, rate))
+    }).collect()
+}
+
+fn parse_getprop_line(line: &str) -> Option<(&str, &str)> {
+    let line = line.trim();
+    if !line.starts_with('[') {
+        return None;
+    }
+    let mut parts = line.split("]: [");
+    let key = parts.next()?.strip_prefix('[')?;
+    let val = parts.next()?.strip_suffix(']')?;
+    Some((key, val))
+}
+
+/// Sends a simulated Android hardware keyevent (e.g. 26 for Power, 24/25 for Volume, 3 for Home, 4 for Back).
+pub fn send_keyevent(serial: &str, keycode: u32) -> Result<(), String> {
+    let code_str = keycode.to_string();
+    adb_cmd(Some(serial), &["shell", "input", "keyevent", &code_str]).map(|_| ())
+}
+
+/// Injects text directly into the focused field on the device.
+pub fn send_text(serial: &str, text: &str) -> Result<(), String> {
+    // Android `input text` needs space escaping or quoting
+    let escaped = text.replace(' ', "%s");
+    adb_cmd(Some(serial), &["shell", "input", "text", &escaped]).map(|_| ())
+}
+
+/// Takes a device screenshot and writes PNG bytes directly to the host filesystem.
+pub fn take_screenshot(serial: &str, dest_path: &Path) -> Result<(), String> {
+    let mut cmd = Command::new("adb");
+    if !serial.is_empty() {
+        cmd.arg("-s").arg(serial);
+    }
