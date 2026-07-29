@@ -2191,3 +2191,132 @@ pub fn start_phone_call(serial: Option<&str>, number: &str) -> Result<String, St
             }
             Err(format!("Android could not start the call: {}", reason.lines().next().unwrap_or("Unknown error")))
         }
+    }
+}
+
+#[cfg(test)]
+mod call_tests {
+    use super::phone_call_uri;
+    #[test]
+    fn validates_and_encodes_phone_targets() {
+        assert_eq!(phone_call_uri("+94 (77) 123-4567").unwrap(), "tel:+94771234567");
+        assert_eq!(phone_call_uri("*123#").unwrap(), "tel:*123%23");
+        for value in ["", "+", "12+34", "12;reboot", "abc123"] {
+            assert!(phone_call_uri(value).is_err());
+        }
+    }
+}
+
+/// Ends an active phone call via Android KEYCODE_ENDCALL (6).
+pub fn end_phone_call(serial: Option<&str>) -> Result<String, String> {
+    adb_cmd(serial, &["shell", "input", "keyevent", "6"])
+}
+
+/// Fetches SMS messages from Android `content://sms`.
+pub fn get_sms_messages(serial: Option<&str>) -> Vec<AdbSmsMessage> {
+    let mut list = Vec::new();
+    let query_res = adb_cmd(
+        serial,
+        &[
+            "shell",
+            "content",
+            "query",
+            "--uri",
+            "content://sms",
+            "--projection",
+            "_id,address,body,date,type",
+            "--sort",
+            "\"date DESC\"",
+        ],
+    );
+
+    if let Ok(raw) = query_res {
+        // Collect multi-line rows
+        let mut raw_rows: Vec<String> = Vec::new();
+        for line in raw.lines() {
+            if line.starts_with("Row: ") {
+                raw_rows.push(line.to_string());
+            } else if let Some(last) = raw_rows.last_mut() {
+                last.push('\n');
+                last.push_str(line);
+            }
+        }
+
+        for row_str in raw_rows {
+            // Row format: Row: <idx> _id=<id>, address=<addr>, body=<body>, date=<date>, type=<type>
+            let after_row = if let Some(idx) = row_str.find("_id=") {
+                &row_str[idx..]
+            } else {
+                continue;
+            };
+
+            let addr_marker = ", address=";
+            let body_marker = ", body=";
+            let date_marker = ", date=";
+            let type_marker = ", type=";
+
+            let addr_pos = match after_row.find(addr_marker) {
+                Some(p) => p,
+                None => continue,
+            };
+            let id = after_row["_id=".len()..addr_pos].trim().to_string();
+
+            let after_addr = &after_row[addr_pos + addr_marker.len()..];
+            let body_pos = match after_addr.find(body_marker) {
+                Some(p) => p,
+                None => continue,
+            };
+            let address = after_addr[..body_pos].trim().to_string();
+
+            let after_body = &after_addr[body_pos + body_marker.len()..];
+            let type_pos = match after_body.rfind(type_marker) {
+                Some(p) => p,
+                None => continue,
+            };
+            let type_str = after_body[type_pos + type_marker.len()..].trim();
+            let is_outgoing = type_str == "2";
+
+            let before_type = &after_body[..type_pos];
+            let date_pos = match before_type.rfind(date_marker) {
+                Some(p) => p,
+                None => continue,
+            };
+            let date_str = before_type[date_pos + date_marker.len()..].trim();
+            let body = before_type[..date_pos].to_string();
+
+            let time_str = date_str
+                .parse::<i64>()
+                .ok()
+                .map(format_timestamp_millis)
+                .unwrap_or_else(|| "Recent".to_string());
+
+            if !address.is_empty() && !body.is_empty() {
+                list.push(AdbSmsMessage {
+                    id,
+                    contact_name: address.clone(),
+                    address,
+                    text: body,
+                    time_str,
+                    is_outgoing,
+                });
+            }
+        }
+    }
+
+    list
+}
+
+/// Sends an SMS message to a phone number using Android SENDTO intent.
+pub fn send_sms(serial: Option<&str>, number: &str, text: &str) -> Result<String, String> {
+    if number.trim().is_empty() {
+        return Err("Recipient phone number is required".to_string());
+    }
+    if text.trim().is_empty() {
+        return Err("Message body cannot be empty".to_string());
+    }
+
+    let sms_target = format!("sms:{}", number.trim());
+    adb_cmd(
+        serial,
+        &[
+            "shell",
