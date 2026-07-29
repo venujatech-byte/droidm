@@ -2062,3 +2062,132 @@ pub fn get_call_logs(serial: Option<&str>) -> Vec<AdbCallLogEntry> {
                         name = val.to_string();
                     }
                 } else if let Some(val) = kv.strip_prefix("duration=") {
+                    duration = val.parse().unwrap_or(0);
+                } else if let Some(val) = kv.strip_prefix("date=") {
+                    date_millis = val.parse::<i64>().ok();
+                } else if let Some(val) = kv.strip_prefix("type=") {
+                    match val.trim() {
+                        "1" => call_type = AdbCallType::Incoming,
+                        "2" => call_type = AdbCallType::Outgoing,
+                        "3" => call_type = AdbCallType::Missed,
+                        _ => call_type = AdbCallType::Incoming,
+                    }
+                }
+            }
+
+            if !number.is_empty() {
+                let display_name = if name.is_empty() { number.clone() } else { name };
+                let dur_str = if call_type == AdbCallType::Missed {
+                    "Missed".to_string()
+                } else if duration == 0 {
+                    "0s".to_string()
+                } else if duration < 60 {
+                    format!("{}s", duration)
+                } else {
+                    format!("{}m {}s", duration / 60, duration % 60)
+                };
+                let time_str = date_millis
+                    .map(format_timestamp_millis)
+                    .unwrap_or_else(|| "Recent".to_string());
+                list.push(AdbCallLogEntry {
+                    id,
+                    number,
+                    name: display_name,
+                    call_type,
+                    time_str,
+                    duration_str: dur_str,
+                });
+            }
+        }
+    }
+
+    list
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct AdbContactEntry {
+    pub id: String,
+    pub name: String,
+    pub number: String,
+}
+
+/// Fetches contacts from Android contacts content providers.
+pub fn get_contacts(serial: Option<&str>) -> Result<Vec<AdbContactEntry>, String> {
+    let mut list = Vec::new();
+    let query = "content query --uri content://com.android.contacts/data/phones --projection _id:display_name:data1";
+    let mut raw = adb_cmd(serial, &["shell", &format!("{query} 2>&1")])?;
+    if raw.contains("Exception") || raw.contains("Permission Denial") || raw.contains("Error") {
+        raw = adb_cmd(serial, &["shell", &format!("su -c '{query}' 2>&1")])
+            .map_err(|_| "Contacts access denied by Android. Pairing Bluetooth does not grant contacts access.".to_string())?;
+        if raw.contains("Exception") || raw.contains("denied") || raw.contains("not found") || raw.contains("Error") {
+            return Err("Contacts access denied by Android. This device does not allow ADB to read its address book.".to_string());
+        }
+    }
+    {
+        for line in raw.lines() {
+            let trimmed = line.trim();
+            if !trimmed.starts_with("Row:") {
+                continue;
+            }
+            let mut id = String::new();
+            let mut name = String::new();
+            let mut number = String::new();
+
+            for token in trimmed.split(',') {
+                let kv = token.trim();
+                if let Some(val) = kv.strip_prefix("_id=") {
+                    id = val.to_string();
+                } else if let Some(val) = kv.strip_prefix("display_name=").or_else(|| kv.strip_prefix("name=")) {
+                    if val != "NULL" {
+                        name = val.to_string();
+                    }
+                } else if let Some(val) = kv.strip_prefix("data1=").or_else(|| kv.strip_prefix("number=")) {
+                    if val != "NULL" {
+                        number = val.to_string();
+                    }
+                }
+            }
+            if !number.is_empty() || !name.is_empty() {
+                list.push(AdbContactEntry {
+                    id: if id.is_empty() { list.len().to_string() } else { id },
+                    name: if name.is_empty() { "Unnamed Contact".to_string() } else { name },
+                    number,
+                });
+            }
+        }
+    }
+
+    Ok(list)
+}
+
+fn phone_call_uri(number: &str) -> Result<String, String> {
+    let number = number.trim();
+    if number.chars().any(|c| !c.is_ascii_digit() && !"+*# ()-.".contains(c)) {
+        return Err("Phone numbers may contain digits, a leading +, * or #".into());
+    }
+    let clean: String = number.chars().filter(|c| c.is_ascii_digit() || "+*#".contains(*c)).collect();
+    if !clean.chars().any(|c| c.is_ascii_digit()) || clean.chars().skip(1).any(|c| c == '+') {
+        return Err("Please enter a valid phone number".into());
+    }
+    Ok(format!("tel:{}", clean.replace('#', "%23")))
+}
+
+/// Requests a call once; Android may require SIM selection or device-side confirmation.
+pub fn start_phone_call(serial: Option<&str>, number: &str) -> Result<String, String> {
+    let target = phone_call_uri(number)?;
+    let result = adb_cmd(serial, &["shell", &format!("am start -a android.intent.action.CALL -d '{target}' -f 0x10000000 2>&1")]);
+    match result {
+        Ok(output) if !output.contains("Error") && !output.contains("Exception") && !output.contains("Permission Denial") => {
+            Ok("Call requested. Check the device for SIM selection or confirmation.".into())
+        }
+        result => {
+            let reason = match result { Ok(output) | Err(output) => output };
+            if reason.contains("SecurityException") || reason.contains("Permission Denial") {
+                let dial = adb_cmd(serial, &["shell", &format!("am start -a android.intent.action.DIAL -d '{target}' -f 0x10000000 2>&1")])?;
+                if !dial.contains("Error") && !dial.contains("Exception") && !dial.contains("Permission Denial") {
+                    return Ok("Dialer opened. Tap Call on the device to place the call.".into());
+                }
+                return Err("Android could not open the dialer. Unlock the device and try again.".into());
+            }
+            Err(format!("Android could not start the call: {}", reason.lines().next().unwrap_or("Unknown error")))
+        }
