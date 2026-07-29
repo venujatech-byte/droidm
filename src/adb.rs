@@ -1933,3 +1933,132 @@ pub fn get_notifications(serial: Option<&str>) -> Vec<AdbNotification> {
         for line in raw.lines() {
             let trimmed = line.trim();
             if trimmed.contains("NotificationRecord(") {
+                if !cur_title.is_empty() || !cur_text.is_empty() {
+                    let app_name = cur_pkg.rsplit('.').next().unwrap_or("App").to_string();
+                    notifications.push(AdbNotification {
+                        id: if cur_id.is_empty() { format!("notif_{}", notifications.len()) } else { cur_id.clone() },
+                        package: cur_pkg.clone(),
+                        app_name: clean_package_label(&app_name),
+                        title: cur_title.clone(),
+                        text: cur_text.clone(),
+                        subtext: cur_subtext.clone(),
+                        time_str: if cur_time.is_empty() { "Just now".to_string() } else { cur_time.clone() },
+                        key: format!("{}:{}", cur_pkg, cur_id),
+                    });
+                    cur_title.clear();
+                    cur_text.clear();
+                    cur_subtext.clear();
+                }
+
+                // Extract package name
+                if let Some(pkg_idx) = trimmed.find("pkg=") {
+                    let rem = &trimmed[pkg_idx + 4..];
+                    if let Some(end) = rem.find(|c: char| c.is_whitespace() || c == ':') {
+                        cur_pkg = rem[..end].to_string();
+                    }
+                }
+                if let Some(id_idx) = trimmed.find("id=") {
+                    let rem = &trimmed[id_idx + 3..];
+                    if let Some(end) = rem.find(|c: char| c.is_whitespace() || c == ':') {
+                        cur_id = rem[..end].to_string();
+                    }
+                }
+            } else if trimmed.starts_with("android.title=String (") {
+                if let Some(val) = trimmed.strip_prefix("android.title=String (") {
+                    cur_title = val.trim_end_matches(')').to_string();
+                }
+            } else if trimmed.starts_with("android.text=String (") {
+                if let Some(val) = trimmed.strip_prefix("android.text=String (") {
+                    cur_text = val.trim_end_matches(')').to_string();
+                }
+            } else if trimmed.starts_with("android.subText=String (") {
+                if let Some(val) = trimmed.strip_prefix("android.subText=String (") {
+                    cur_subtext = val.trim_end_matches(')').to_string();
+                }
+            } else if trimmed.starts_with("postTime=") {
+                cur_time = "Recent".to_string();
+            }
+        }
+
+        if !cur_title.is_empty() || !cur_text.is_empty() {
+            let app_name = cur_pkg.rsplit('.').next().unwrap_or("App").to_string();
+            notifications.push(AdbNotification {
+                id: if cur_id.is_empty() { format!("notif_{}", notifications.len()) } else { cur_id.clone() },
+                package: cur_pkg,
+                app_name: clean_package_label(&app_name),
+                title: cur_title,
+                text: cur_text,
+                subtext: cur_subtext,
+                time_str: "Just now".to_string(),
+                key: format!("k_{}", notifications.len()),
+            });
+        }
+    }
+
+    notifications
+}
+
+fn clean_package_label(pkg: &str) -> String {
+    let mut chars = pkg.chars();
+    match chars.next() {
+        None => String::new(),
+        Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+    }
+}
+
+/// Fetches recent call logs from Android `content://call_log/calls`.
+pub fn get_call_logs(serial: Option<&str>) -> Vec<AdbCallLogEntry> {
+    let mut list = Vec::new();
+    let query_args = &[
+        "content",
+        "query",
+        "--uri",
+        "content://call_log/calls",
+        "--projection",
+        "_id,number,name,date,duration,type",
+        "--sort",
+        "\"date DESC\"",
+    ];
+
+    let mut raw_opt = adb_cmd(serial, &[&["shell"], &query_args[..]].concat().as_slice()).ok();
+    if let Some(ref raw) = raw_opt {
+        if raw.contains("SecurityException") || raw.contains("Permission Denial") {
+            // Attempt with root su -c if available
+            raw_opt = adb_cmd(
+                serial,
+                &[
+                    "shell",
+                    "su",
+                    "-c",
+                    "content query --uri content://call_log/calls --projection _id,number,name,date,duration,type --sort 'date DESC'",
+                ],
+            )
+            .ok();
+        }
+    }
+
+    if let Some(raw) = raw_opt {
+        for line in raw.lines() {
+            let trimmed = line.trim();
+            if !trimmed.starts_with("Row:") {
+                continue;
+            }
+
+            let mut id = String::new();
+            let mut number = String::new();
+            let mut name = String::new();
+            let mut duration = 0u64;
+            let mut call_type = AdbCallType::Incoming;
+            let mut date_millis: Option<i64> = None;
+
+            for token in trimmed.split(',') {
+                let kv = token.trim();
+                if let Some(val) = kv.strip_prefix("_id=") {
+                    id = val.to_string();
+                } else if let Some(val) = kv.strip_prefix("number=") {
+                    number = val.to_string();
+                } else if let Some(val) = kv.strip_prefix("name=") {
+                    if val != "NULL" {
+                        name = val.to_string();
+                    }
+                } else if let Some(val) = kv.strip_prefix("duration=") {
