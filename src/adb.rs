@@ -1804,3 +1804,132 @@ pub fn launch_external_adb_terminal(serial: &str) -> Result<(), String> {
     let script_content = format!(
 r#"#!/usr/bin/env bash
 echo "=========================================================="
+echo " Server Launcher: Android ADB Interactive Shell"
+echo " Device : {display_serial}"
+echo "=========================================================="
+echo "Connecting to {display_serial}..."
+{adb_target}
+EXIT_CODE=$?
+echo ""
+echo "ADB shell session closed (exit code: $EXIT_CODE)."
+echo "Press Enter to exit."
+read -r
+"#,
+        display_serial = if serial.trim().is_empty() { "default device" } else { serial.trim() },
+        adb_target = adb_target,
+    );
+
+    let _ = std::fs::write(&script_path, script_content);
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(metadata) = std::fs::metadata(&script_path) {
+            let mut perms = metadata.permissions();
+            perms.set_mode(0o755);
+            let _ = std::fs::set_permissions(&script_path, perms);
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let script_str = script_path.to_string_lossy().to_string();
+        let chosen = crate::service::find_terminal();
+        let mut cmd;
+        if let Some((term, args)) = chosen {
+            cmd = Command::new(term);
+            for arg in args {
+                cmd.arg(arg);
+            }
+            cmd.arg(&script_str);
+        } else {
+            let fallbacks = [
+                ("ptyxis", vec!["--new-window", "--", script_str.as_str()]),
+                ("x-terminal-emulator", vec!["-e", script_str.as_str()]),
+                ("gnome-terminal", vec!["--", script_str.as_str()]),
+                ("kgx", vec!["-e", script_str.as_str()]),
+                ("konsole", vec!["-e", script_str.as_str()]),
+                ("xfce4-terminal", vec!["-e", script_str.as_str()]),
+                ("alacritty", vec!["-e", script_str.as_str()]),
+                ("kitty", vec![script_str.as_str()]),
+                ("xterm", vec!["-e", script_str.as_str()]),
+            ];
+
+            for (term_bin, args) in fallbacks {
+                let mut c = Command::new(term_bin);
+                c.args(&args);
+                #[cfg(unix)]
+                {
+                    use std::os::unix::process::CommandExt;
+                    c.process_group(0);
+                }
+                if let Ok(mut child) = c.spawn() {
+                    std::thread::spawn(move || {
+                        let _ = child.wait();
+                    });
+                    return Ok(());
+                }
+            }
+
+            return Err("No compatible terminal emulator (ptyxis, gnome-terminal, konsole, xterm) found.".to_string());
+        }
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            cmd.process_group(0);
+        }
+        let mut child = cmd.spawn().map_err(|e| format!("Failed to spawn terminal: {}", e))?;
+        std::thread::spawn(move || {
+            let _ = child.wait();
+        });
+        Ok(())
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let mut cmd = Command::new("cmd.exe");
+        cmd.args(&["/K", &format!("adb -s {} shell", serial)]);
+        cmd.spawn().map_err(|e| format!("Failed to spawn cmd: {}", e))?;
+        Ok(())
+    }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// PHONE LINK SUITE: NOTIFICATIONS, CALLS, MESSAGING, GALLERY & QUICK CONTROLS
+// ═════════════════════════════════════════════════════════════════════════════
+
+pub fn format_timestamp_millis(ms: i64) -> String {
+    if let Some(dt) = chrono::DateTime::from_timestamp_millis(ms) {
+        let local_dt = chrono::DateTime::<chrono::Local>::from(dt);
+        local_dt.format("%b %-d, %-I:%M %p").to_string()
+    } else {
+        "Recent".to_string()
+    }
+}
+
+pub fn format_timestamp_secs(secs: i64) -> String {
+    if let Some(dt) = chrono::DateTime::from_timestamp(secs, 0) {
+        let local_dt = chrono::DateTime::<chrono::Local>::from(dt);
+        local_dt.format("%b %-d, %-I:%M %p").to_string()
+    } else {
+        "Recent".to_string()
+    }
+}
+
+/// Fetches active notifications from the Android device via `dumpsys notification`.
+pub fn get_notifications(serial: Option<&str>) -> Vec<AdbNotification> {
+    let mut notifications = Vec::new();
+    if let Ok(raw) = adb_cmd(serial, &["shell", "dumpsys", "notification", "--noredact"])
+        .or_else(|_| adb_cmd(serial, &["shell", "dumpsys", "notification"]))
+    {
+        let mut cur_pkg = String::new();
+        let mut cur_id = String::new();
+        let mut cur_title = String::new();
+        let mut cur_text = String::new();
+        let mut cur_subtext = String::new();
+        let mut cur_time = String::new();
+
+        for line in raw.lines() {
+            let trimmed = line.trim();
+            if trimmed.contains("NotificationRecord(") {
