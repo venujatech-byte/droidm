@@ -2320,3 +2320,132 @@ pub fn send_sms(serial: Option<&str>, number: &str, text: &str) -> Result<String
         serial,
         &[
             "shell",
+            "am",
+            "start",
+            "-a",
+            "android.intent.action.SENDTO",
+            "-d",
+            &sms_target,
+            "--es",
+            "sms_body",
+            text,
+        ],
+    )
+}
+
+/// Lists camera and gallery photos stored on device MediaStore or standard storage folders.
+pub fn list_photos(serial: Option<&str>) -> Vec<AdbPhotoItem> {
+    let mut items = Vec::new();
+
+    // 1. Query Android MediaStore
+    if let Ok(raw) = adb_cmd(serial, &["shell", "content", "query", "--uri", "content://media/external/images/media"]) {
+        for line in raw.lines() {
+            let trimmed = line.trim();
+            if !trimmed.starts_with("Row:") {
+                continue;
+            }
+
+            let mut name = String::new();
+            let mut path = String::new();
+            let mut size_bytes: Option<u64> = None;
+            let mut date_secs: Option<i64> = None;
+
+            for token in trimmed.split(", ") {
+                let kv = token.trim();
+                if let Some(val) = kv.strip_prefix("_display_name=") {
+                    name = val.to_string();
+                } else if let Some(val) = kv.strip_prefix("_data=") {
+                    path = val.to_string();
+                } else if let Some(val) = kv.strip_prefix("_size=") {
+                    size_bytes = val.parse::<u64>().ok();
+                } else if let Some(val) = kv.strip_prefix("date_modified=") {
+                    date_secs = val.parse::<i64>().ok();
+                }
+            }
+
+            if !path.is_empty() {
+                if name.is_empty() {
+                    name = Path::new(&path)
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("photo.jpg")
+                        .to_string();
+                }
+
+                let size_str = if let Some(bytes) = size_bytes {
+                    if bytes < 1024 {
+                        format!("{} B", bytes)
+                    } else if bytes < 1024 * 1024 {
+                        format!("{:.1} KB", bytes as f64 / 1024.0)
+                    } else {
+                        format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0))
+                    }
+                } else {
+                    "--".to_string()
+                };
+
+                let date_str = date_secs
+                    .map(format_timestamp_secs)
+                    .unwrap_or_else(|| "Recent".to_string());
+
+                items.push(AdbPhotoItem {
+                    name,
+                    path,
+                    size_str,
+                    date_str,
+                });
+            }
+        }
+    }
+
+    // 2. Fallback via file system search if MediaStore is empty
+    if items.is_empty() {
+        let cmd = "find /sdcard/DCIM /sdcard/Pictures /sdcard/Download -maxdepth 3 -type f \\( -iname '*.jpg' -o -iname '*.png' -o -iname '*.webp' -o -iname '*.jpeg' \\) 2>/dev/null | head -n 48";
+        if let Ok(out) = adb_cmd(serial, &["shell", cmd]) {
+            for line in out.lines() {
+                let path = line.trim().to_string();
+                if path.is_empty() {
+                    continue;
+                }
+                let name = Path::new(&path)
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("image.jpg")
+                    .to_string();
+
+                items.push(AdbPhotoItem {
+                    name,
+                    path,
+                    size_str: "Image".to_string(),
+                    date_str: "Device Photo".to_string(),
+                });
+            }
+        }
+    }
+
+    items
+}
+
+/// Lists one newest-first MediaStore page; fallback paths use an offset cursor.
+pub fn list_photos_page(serial: Option<&str>, cursor: Option<&str>, limit: usize) -> (Vec<AdbPhotoItem>, Option<String>) {
+    let limit = limit.clamp(1, 100);
+    let media_cursor = cursor.and_then(|value| value.strip_prefix("m:")).and_then(|value| value.parse::<u64>().ok());
+    if cursor.is_none() || media_cursor.is_some() {
+        let filter = media_cursor.map(|id| format!("--where \"_id < {id}\" ")).unwrap_or_default();
+        let query = format!(
+            "content query --uri content://media/external/images/media --projection _id:_display_name:_data:_size:date_modified {filter}--sort \"_id DESC\" 2>&1 | head -n {}",
+            limit + 1
+        );
+        if let Ok(raw) = adb_cmd(serial, &["shell", &query]) {
+            let mut page = Vec::new();
+            for line in raw.lines().filter(|line| line.trim_start().starts_with("Row:")) {
+                let mut id = String::new();
+                let mut name = String::new();
+                let mut path = String::new();
+                let mut size_bytes = None;
+                let mut date_secs = None;
+                for token in line.trim().split(", ") {
+                    let kv = token.trim();
+                    if let Some(value) = kv.strip_prefix("_id=") { id = value.to_string(); }
+                    else if let Some(value) = kv.strip_prefix("_display_name=") { name = value.to_string(); }
+                    else if let Some(value) = kv.strip_prefix("_data=") { path = value.to_string(); }
