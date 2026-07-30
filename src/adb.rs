@@ -2449,3 +2449,118 @@ pub fn list_photos_page(serial: Option<&str>, cursor: Option<&str>, limit: usize
                     if let Some(value) = kv.strip_prefix("_id=") { id = value.to_string(); }
                     else if let Some(value) = kv.strip_prefix("_display_name=") { name = value.to_string(); }
                     else if let Some(value) = kv.strip_prefix("_data=") { path = value.to_string(); }
+                    else if let Some(value) = kv.strip_prefix("_size=") { size_bytes = value.parse::<u64>().ok(); }
+                    else if let Some(value) = kv.strip_prefix("date_modified=") { date_secs = value.parse::<i64>().ok(); }
+                }
+                if path.is_empty() { continue; }
+                if name.is_empty() { name = Path::new(&path).file_name().and_then(|value| value.to_str()).unwrap_or("photo.jpg").to_string(); }
+                let size_str = size_bytes.map(|bytes| if bytes < 1024 { format!("{bytes} B") } else if bytes < 1024 * 1024 { format!("{:.1} KB", bytes as f64 / 1024.0) } else { format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0)) }).unwrap_or_else(|| "--".into());
+                page.push((id, AdbPhotoItem { name, path, size_str, date_str: date_secs.map(format_timestamp_secs).unwrap_or_else(|| "Recent".into()) }));
+            }
+            if !page.is_empty() || media_cursor.is_some() {
+                let has_more = page.len() > limit;
+                page.truncate(limit);
+                let next = has_more.then(|| format!("m:{}", page.last().map(|item| item.0.as_str()).unwrap_or("")));
+                return (page.into_iter().map(|item| item.1).collect(), next);
+            }
+        }
+    }
+
+    let all = list_photos(serial);
+    let offset = cursor.and_then(|value| value.strip_prefix("f:")).and_then(|value| value.parse::<usize>().ok()).unwrap_or(0);
+    let items: Vec<_> = all.iter().skip(offset).take(limit).cloned().collect();
+    let next = (offset + items.len() < all.len()).then(|| format!("f:{}", offset + items.len()));
+    (items, next)
+}
+
+/// Counts all images visible to Android MediaStore, falling back to shared storage when unavailable.
+pub fn count_photos(serial: Option<&str>) -> usize {
+    if let Ok(count) = adb_cmd(serial, &["shell", "content query --uri content://media/external/images/media --projection _id 2>/dev/null | grep -c '^Row:'"]) {
+        if let Ok(count) = count.trim().parse() { if count > 0 { return count; } }
+    }
+    adb_cmd(serial, &["shell", "find /sdcard -type f \\( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' -o -iname '*.gif' \\) 2>/dev/null | wc -l"])
+        .ok().and_then(|count| count.trim().parse().ok()).unwrap_or(0)
+}
+
+/// Pulls a remote file/photo to local directory.
+pub fn pull_photo_to_downloads(serial: Option<&str>, remote_path: &str) -> Result<String, String> {
+    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+    let downloads_dir = Path::new(&home).join("Downloads");
+    let dest_dir = if downloads_dir.exists() {
+        downloads_dir
+    } else {
+        Path::new(&home).to_path_buf()
+    };
+
+    let filename = Path::new(remote_path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("photo.jpg");
+    let dest_file = dest_dir.join(filename);
+
+    pull_file(serial.unwrap_or(""), remote_path, &dest_file)?;
+    Ok(format!("Saved to {}", dest_file.display()))
+}
+
+/// Reads a remote image into memory through a temporary file for the photo preview.
+pub fn read_remote_file(serial: &str, remote_path: &str) -> Result<Vec<u8>, String> {
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or_default();
+    let local_path = std::env::temp_dir().join(format!("launcher-adb-preview-{}-{stamp}", std::process::id()));
+    let pull_result = pull_file(serial, remote_path, &local_path);
+    if let Err(e) = pull_result {
+        let _ = std::fs::remove_file(&local_path);
+        return Err(e);
+    }
+    let bytes = std::fs::read(&local_path).map_err(|e| format!("Failed to read preview: {e}"));
+    let _ = std::fs::remove_file(local_path);
+    bytes
+}
+
+/// Deletes a photo from the device.
+pub fn delete_device_photo(serial: Option<&str>, remote_path: &str) -> Result<String, String> {
+    adb_cmd(serial, &["shell", "rm", "-f", remote_path])
+}
+
+/// Toggles Do Not Disturb (DND) / Zen Mode.
+pub fn toggle_dnd(serial: Option<&str>, enable: bool) -> Result<String, String> {
+    let mode = if enable { "1" } else { "0" };
+    adb_cmd(serial, &["shell", "settings", "put", "global", "zen_mode", mode])
+}
+
+/// Toggles device audio mute via KEYCODE_VOLUME_MUTE (164).
+pub fn toggle_mute(serial: Option<&str>) -> Result<String, String> {
+    adb_cmd(serial, &["shell", "input", "keyevent", "164"])
+}
+
+/// Increases volume via KEYCODE_VOLUME_UP (24).
+pub fn volume_up(serial: Option<&str>) -> Result<String, String> {
+    adb_cmd(serial, &["shell", "input", "keyevent", "24"])
+}
+
+/// Decreases volume via KEYCODE_VOLUME_DOWN (25).
+pub fn volume_down(serial: Option<&str>) -> Result<String, String> {
+    adb_cmd(serial, &["shell", "input", "keyevent", "25"])
+}
+
+/// Triggers media Play / Pause via KEYCODE_MEDIA_PLAY_PAUSE (85).
+pub fn media_play_pause(serial: Option<&str>) -> Result<String, String> {
+    adb_cmd(serial, &["shell", "input", "keyevent", "85"])
+}
+
+/// Skips to next media track via KEYCODE_MEDIA_NEXT (87).
+pub fn media_next(serial: Option<&str>) -> Result<String, String> {
+    adb_cmd(serial, &["shell", "input", "keyevent", "87"])
+}
+
+/// Rewinds to previous media track via KEYCODE_MEDIA_PREVIOUS (88).
+pub fn media_previous(serial: Option<&str>) -> Result<String, String> {
+    adb_cmd(serial, &["shell", "input", "keyevent", "88"])
+}
+
+/// Wakes up the device screen via KEYCODE_WAKEUP (224).
+pub fn wake_screen(serial: Option<&str>) -> Result<String, String> {
+    adb_cmd(serial, &["shell", "input", "keyevent", "224"])
+}
