@@ -1328,3 +1328,136 @@ textarea { width: 100%; min-height: 145px; resize: vertical; line-height: 1.55; 
   border: none;
 }
 
+.power-metric-head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font: 600 10px ui-monospace, monospace;
+  color: #94a3b8;
+}
+
+.power-metric-head .icon {
+  color: var(--accent);
+  font-size: 12px;
+}
+
+.power-metric-hero {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin: 6px 0 8px;
+}
+
+.power-metric-hero b {
+  font-size: 24px;
+  font-weight: 800;
+  color: #f1f5f9;
+  line-height: 1;
+}
+
+.power-metric-hero small {
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.power-progress-bar {
+  width: 100%;
+  height: 4px;
+  background: #121c2a;
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.power-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.power-meta-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: auto;
+}
+
+.power-meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font: 500 9.5px ui-monospace, monospace;
+}
+
+.power-meta-row small {
+  color: #94a3b8;
+}
+
+.power-meta-row b {
+  color: #cbd5e1;
+  font-weight: 700;
+}
+
+.power-meta-row b.accent-text {
+  color: var(--accent);
+}
+
+.power-chips-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.power-chip-tile {
+  background: #0a0f1d;
+  border-radius: 6px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.power-chip-tile small {
+  font: 600 8.5px ui-monospace, monospace;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.power-chip-tile b {
+  font: 700 10.5px ui-monospace, monospace;
+  color: #f1f5f9;
+}
+
+.power-active-gov-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(53, 132, 228, 0.14);
+  color: #e2e8f0;
+  font: 700 8.5px ui-monospace, monospace;
+  padding: 3px 8px;
+  border-radius: 4px;
+  user-select: none;
+}
+
+.android-power-presets-grid,
+.power-presets-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 10px;
+}
+
+@media (max-width: 800px) {
+  .android-power-presets-grid,
+  .power-presets-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.android-power-preset-card,
+.power-preset-card {
