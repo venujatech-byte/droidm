@@ -929,3 +929,136 @@ textarea { width: 100%; min-height: 145px; resize: vertical; line-height: 1.55; 
 .sensors-subtab-pill span:not(.icon) {
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+.sensors-subtab-pill:hover {
+  background: color-mix(in srgb, var(--surface2), #ffffff 10%);
+  color: #f1f5f9;
+}
+
+.sensors-subtab-pill.active {
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 750;
+  box-shadow: 0 2px 14px color-mix(in srgb, var(--accent), transparent 50%);
+}
+
+.sensors-subtab-pill .icon {
+  font-size: 14px;
+  color: var(--dim);
+  flex-shrink: 0;
+}
+
+.sensors-subtab-pill.active .icon {
+  color: var(--accent-text);
+}
+
+/* Telemetry Header Controls (inside top header) */
+.cadence-control-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sensor-cadence-label {
+  font: 700 10.5px var(--font-mono);
+  color: var(--dim);
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+
+.sensor-cadence-select {
+  padding: 5px 12px;
+  min-height: 34px;
+  font: 600 12px Inter, system-ui, sans-serif;
+  border-radius: 8px;
+  background-color: var(--surface2);
+  border: none;
+}
+
+.live-pulse-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font: 700 11px var(--font-mono);
+  color: #f1f5f9;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface2), transparent 30%);
+  border: none;
+}
+
+.live-pulse-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px var(--green);
+  animation: pulse-glow 2s infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.85); }
+}
+
+.sensors-view-main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+/* 4 Big Stat Cards Grid */
+.sensors-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.sensors-stat-card {
+  background: var(--surface);
+  border: none;
+  border-radius: 12px;
+  padding: 18px 20px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.16);
+  min-height: 175px;
+}
+
+.stat-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: 700 11.5px ui-monospace, monospace;
+  color: #94a3b8;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+
+.stat-card-title .icon {
+  color: var(--accent);
+  font-size: 16px;
+}
+
+.stat-card-hero {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin: 10px 0 4px;
+}
+
+.stat-hero-val {
+  font-size: 34px;
+  font-weight: 800;
+  color: #f1f5f9;
+  letter-spacing: -0.8px;
+  line-height: 1.1;
+}
+
+.stat-hero-unit {
+  font-size: 16px;
