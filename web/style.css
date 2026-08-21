@@ -1195,3 +1195,136 @@ textarea { width: 100%; min-height: 145px; resize: vertical; line-height: 1.55; 
 }
 
 .conn-stats-hero strong {
+  font-size: 30px;
+  font-weight: 800;
+  color: #f1f5f9;
+}
+
+.conn-stats-hero span {
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.conn-interface-chips {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.conn-iface-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--well);
+  border: none;
+  font: 600 12.5px ui-monospace, monospace;
+  color: #cbd5e1;
+}
+
+/* Waveform History Card */
+.sensors-waveform-card {
+  display: flex;
+  flex-direction: column;
+  padding: 20px 22px;
+  border-radius: 12px;
+  border: none;
+}
+
+.waveform-chart-box {
+  background: #090f19;
+  border-radius: 10px;
+  padding: 6px;
+  margin: 12px 0 6px;
+}
+
+.waveform-time-axis {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  font: 600 11px ui-monospace, monospace;
+  color: var(--dim);
+  margin-top: 8px;
+  box-sizing: border-box;
+  padding-left: var(--wf-pad-left, 70px);
+  padding-right: var(--wf-pad-right, 18px);
+}
+
+.waveform-time-axis span:nth-child(2) { text-align: center; }
+.waveform-time-axis span:nth-child(3) { text-align: center; }
+.waveform-time-axis span:nth-child(4) { text-align: center; }
+.waveform-time-axis span:last-child { text-align: right; color: #e2e8f0; font-weight: 700; }
+
+/* Power Telemetry Dashboard */
+.power-dashboard-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+@media (max-width: 1020px) {
+  .power-dashboard-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.power-col-left, .power-col-right {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.power-cell-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font: 700 10.5px ui-monospace, monospace;
+  color: #94a3b8;
+  letter-spacing: 0.5px;
+}
+
+.power-cell-title .icon {
+  color: var(--accent);
+  font-size: 14px;
+}
+
+.power-healthy-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(53, 132, 228, 0.12);
+  color: #e2e8f0;
+  font: 700 8.5px ui-monospace, monospace;
+  padding: 3px 8px;
+  border-radius: 4px;
+  user-select: none;
+}
+
+.power-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.power-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.power-metric-card {
+  background: #0a0f1d;
+  border-radius: 8px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  min-height: 125px;
+  border: none;
+}
+
