@@ -1993,3 +1993,136 @@ textarea { width: 100%; min-height: 145px; resize: vertical; line-height: 1.55; 
   cursor: not-allowed;
   opacity: 0.8;
 }
+
+.tm-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.tm-search-icon {
+  position: absolute;
+  right: 12px;
+  width: 13px;
+  height: 13px;
+  stroke: #64748b;
+  pointer-events: none;
+}
+
+.tm-search-input {
+  height: 32px;
+  border-radius: 999px;
+  padding: 0 36px 0 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border: none;
+  color: #f1f5f9;
+  font-size: 14px;
+  width: 246px;
+  transition: all 0.2s ease;
+}
+
+.tm-search-input:focus {
+  background: rgba(255, 255, 255, 0.08);
+  width: 246px;
+  outline: 1px solid var(--accent);
+}
+
+.tm-search-clear {
+  position: absolute;
+  right: 28px;
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 4px;
+}
+
+.tm-interval-select {
+  height: 32px;
+  border-radius: 999px;
+  padding: 0 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: none;
+  color: #94a3b8;
+  font: 500 12px var(--font-body);
+  cursor: pointer;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* Table Container & Scrolling */
+.tm-table-wrap {
+  overflow-x: auto;
+  border-radius: 0;
+  background: transparent;
+  border: none;
+}
+
+.tm-grid {
+  display: grid;
+  grid-template-columns: minmax(240px, 2.3fr) repeat(6, minmax(92px, 1fr));
+  width: 100%;
+  min-width: 820px;
+}
+
+/* Two-tier Stacked Header */
+.tm-header-row {
+  display: contents;
+}
+
+.tm-header-cell {
+  padding: 12px 8px 8px;
+  height: 76px;
+  background: transparent;
+  border-bottom: none;
+  user-select: none;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  transition: background 0.15s ease;
+}
+
+.tm-header-cell:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.tm-header-cell.col-name {
+  justify-content: center;
+  align-items: flex-start;
+  padding-left: 14px;
+}
+
+.tm-header-cell.col-metric {
+  align-items: flex-end;
+  text-align: right;
+}
+.tm-header-cell[data-sort="power"] { align-items: center; text-align: center; }
+
+.tm-header-top-val {
+  font: 600 14px var(--font-body);
+  color: #f8fafc;
+  line-height: 1.2;
+}
+
+.tm-header-bottom-label {
+  font: 500 12px var(--font-body);
+  color: #94a3b8;
+  letter-spacing: 0.2px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  line-height: 1.2;
+  margin-top: 16px;
+}
+
+.tm-header-cell.sorted .tm-header-bottom-label {
+  color: #f1f5f9;
+}
+
+.tm-sort-arrow {
+  font-size: 11px;
+  color: #38bdf8;
+}
