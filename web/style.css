@@ -2259,3 +2259,136 @@ textarea { width: 100%; min-height: 145px; resize: vertical; line-height: 1.55; 
 .tm-app-name {
   white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+  font-weight: 500;
+  color: #e2e8f0;
+}
+
+/* Heatmap Block Cells */
+.tm-heat-block {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  width: 100%;
+  height: 23px;
+  padding: 0 6px;
+  border-radius: 2px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: ui-monospace, monospace;
+  border: none;
+}
+
+.tm-heat-block.heat-0 {
+  background: transparent;
+  color: #94a3b8;
+}
+
+.tm-heat-block.heat-1 {
+  background: rgba(0, 120, 215, 0.22);
+  color: #f1f5f9;
+}
+
+.tm-heat-block.heat-2 {
+  background: rgba(0, 120, 215, 0.44);
+  color: #f8fafc;
+}
+
+.tm-heat-block.heat-3 {
+  background: rgba(0, 120, 215, 0.70);
+  color: #ffffff;
+}
+
+.tm-heat-block.heat-4 {
+  background: #0078d7;
+  color: #ffffff;
+  font-weight: 800;
+  box-shadow: none;
+}
+
+/* Power Ratings */
+.tm-pwr-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 21px;
+  padding: 0 6px;
+  border: none;
+}
+
+.tm-pwr-very-low {
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.tm-pwr-pill {
+  border-radius: 999px;
+  padding: 2px 8px;
+  font: 700 10.5px var(--font-body);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+}
+
+.tm-pwr-low {
+  background: rgba(0, 120, 215, 0.25);
+  color: #93c5fd;
+}
+
+.tm-pwr-moderate {
+  background: rgba(0, 120, 215, 0.55);
+  color: #ffffff;
+}
+
+.tm-pwr-high {
+  background: rgba(245, 158, 11, 0.35);
+  color: #fde68a;
+}
+
+.tm-pwr-very-high {
+  background: rgba(239, 68, 68, 0.38);
+  color: #fca5a5;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.3);
+}
+
+/* Child Process Rows (Indented) */
+.tm-child-row .tm-cell {
+  height: 23px;
+  font-size: 10.5px;
+  background: rgba(0, 0, 0, 0.12);
+  border-bottom: none;
+}
+
+.tm-child-row .tm-cell.col-name {
+  padding-left: 32px;
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.tm-child-row.selected .tm-cell {
+  background: rgba(0, 120, 215, 0.25) !important;
+}
+
+.tm-child-pid {
+  color: var(--dim);
+  font: 600 10px ui-monospace, monospace;
+  margin-right: 4px;
+}
+
+@media (max-width: 1100px) {
+  .sensors-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .sensors-overview-split {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .sensors-stat-grid {
+    grid-template-columns: 1fr;
+  }
+  .sensor-inspector { grid-template-columns: 1fr; }
