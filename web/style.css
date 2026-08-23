@@ -2525,3 +2525,136 @@ tr[hidden], .app-row[hidden] { display: none !important; }
   display: flex; 
   flex-direction: column; 
   align-items: stretch; 
+  justify-content: flex-start; 
+  gap: 14px;
+  padding: clamp(16px, 2.5vw, 24px); 
+  overflow-y: auto; 
+}
+.dialer-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 2px; }
+.call-control-window {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 58px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: var(--well);
+}
+.call-control-avatar { display: grid; place-items: center; width: 34px; height: 34px; flex: 0 0 34px; border-radius: 50%; background: var(--surface2); color: var(--accent); }
+.call-control-copy { display: grid; gap: 3px; min-width: 0; flex: 1; }
+.call-control-copy b { font-size: 12px; }
+.call-control-copy span { color: var(--muted); font-size: 11px; }
+.call-control-window .button { min-height: 32px; padding: 0 10px; }
+.dial-input-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+.dial-input-container .dial-input {
+  width: 100%;
+  padding-right: 48px;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  color: #38bdf8;
+  font-size: 22px;
+  min-height: 54px;
+}
+.dial-backspace-btn {
+  position: absolute;
+  right: 8px;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  transition: all 0.15s ease;
+}
+.dial-backspace-btn:hover {
+  color: var(--danger);
+  background: rgba(239, 68, 68, 0.12);
+}
+.keypad { gap: 8px; }
+.dial-key-btn {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 2px !important;
+  line-height: 1 !important;
+  height: clamp(42px, 6vh, 52px);
+  border: 0;
+  border-radius: 10px;
+  background: var(--surface2);
+}
+.dial-key-btn:hover { background: color-mix(in srgb, var(--surface2), var(--accent-strong) 24%); }
+.key-digit {
+  font-size: 20px;
+  font-weight: 700;
+}
+.key-sub {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.5px;
+}
+.dial-actions-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  width: 100%;
+}
+.dial-submit, .dial-end { width: 100%; min-height: 42px; }
+.dial-note { margin: 0; text-align: center; }
+
+.comm-tab-pills {
+  display: flex;
+  gap: 6px;
+  background: var(--surface2);
+  border-radius: 10px;
+  padding: 4px;
+  flex: 0 0 auto;
+}
+.comm-tab-pill {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font: 600 12px Inter, system-ui, sans-serif;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.comm-tab-pill:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+}
+.comm-tab-pill.active {
+  background: var(--surface);
+  color: var(--text);
+}
+
+body.communications-style .nav-item.active { background: var(--surface2); color: var(--text); box-shadow: none; }
+body.communications-style .nav-item.active > .icon { color: var(--text); }
+body.communications-style .button.primary { color: #101a2a; }
+body.communications-style button { box-shadow: none !important; }
+
+.installed-app-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap: 8px; padding: 4px 2px 2px; }
+.apps-card { box-shadow: none; }
+.installed-app-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; padding: 10px 12px; border-radius: 9px; background: var(--well); }
+.installed-app-package { min-width: 0; overflow: hidden; color: var(--text); font: 12px var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
+.installed-app-actions { display: flex; flex: 0 0 auto; gap: 7px; }
+.installed-app-actions .button { min-height: 34px; padding: 6px 11px; }
+.installed-app-empty { padding: 22px 8px; }
+
+@media (max-width: 760px) {
+  body.communications-style .content { padding-right: 14px; padding-left: 14px; }
+  body.communications-style .topbar { padding-right: 16px; padding-left: 16px; }
