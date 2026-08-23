@@ -2126,3 +2126,136 @@ textarea { width: 100%; min-height: 145px; resize: vertical; line-height: 1.55; 
   font-size: 11px;
   color: #38bdf8;
 }
+
+/* Section Dividers (Apps, Background processes) */
+.tm-section-row {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: transparent;
+  border-bottom: none;
+  font: 500 14px var(--font-body);
+  color: #f1f5f9;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s ease;
+}
+
+.tm-section-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.tm-section-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  font-size: 12px;
+  transition: transform 0.15s ease;
+  color: #94a3b8;
+}
+
+.tm-section-chevron.expanded {
+  transform: rotate(90deg);
+}
+
+/* Row items */
+.tm-row {
+  display: contents;
+}
+
+.tm-cell {
+  padding: 2px 4px;
+  display: flex;
+  align-items: center;
+  height: 30px;
+  font: 500 13px ui-monospace, monospace;
+  border-bottom: none;
+  transition: background 0.1s ease;
+  cursor: pointer;
+  user-select: none;
+}
+
+.tm-cell.col-name {
+  padding-right: 12px;
+  font-family: var(--font-body);
+  gap: 6px;
+  overflow: hidden;
+}
+
+.tm-cell.col-metric {
+  justify-content: flex-end;
+  text-align: right;
+  padding-right: 4px;
+}
+
+/* Hover & Selected Row Highlighting */
+.tm-row:hover .tm-cell {
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.tm-row.selected .tm-cell {
+  background: rgba(0, 120, 215, 0.35) !important;
+  color: #ffffff;
+}
+
+.tm-row.selected .tm-cell.col-name {
+  border-left: none;
+  padding-right: 12px;
+}
+
+.tm-row.selected .tm-app-name {
+  color: #ffffff;
+  font-weight: 700;
+}
+
+/* Expand / Collapse Button */
+.tm-expander-btn {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 3px;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.tm-expander-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.tm-expander-spacer {
+  width: 18px;
+  flex-shrink: 0;
+}
+
+.tm-chevron {
+  display: inline-block;
+  font-size: 11px;
+  line-height: 1;
+  transition: transform 0.15s ease;
+}
+
+.tm-chevron.expanded {
+  transform: rotate(90deg);
+}
+
+.tm-app-icon {
+  width: 14px;
+  height: 14px;
+  color: #38bdf8;
+  flex-shrink: 0;
+}
+
+.tm-app-name {
+  white-space: nowrap;
+  overflow: hidden;
