@@ -2924,3 +2924,136 @@ body.communications-style button { box-shadow: none !important; }
 }
 
 .gpu-engine-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font: 700 9px ui-monospace, monospace;
+  color: var(--dim);
+  letter-spacing: 0.8px;
+}
+
+.gpu-engine-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+}
+
+.gpu-engine-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.gpu-engine-title-row h2 {
+  font-size: 20px;
+  font-weight: 800;
+  color: #f1f5f9;
+  letter-spacing: -0.3px;
+  margin: 0;
+}
+
+.gpu-driver-chip {
+  background: rgba(53, 132, 228, 0.2);
+  color: #93c5fd;
+  border: 1px solid rgba(53, 132, 228, 0.4);
+  font: 700 10px ui-monospace, monospace;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.gpu-engine-subtitle {
+  font: 500 11px ui-monospace, monospace;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.gpu-engine-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.gpu-mode-pill {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  color: #94a3b8;
+  font: 700 10px ui-monospace, monospace;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.gpu-mode-pill:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f1f5f9;
+}
+
+.gpu-mode-pill.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--accent), transparent 60%);
+}
+
+.gpu-refresh-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  color: #94a3b8;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.gpu-refresh-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f1f5f9;
+}
+
+/* Engine Utilization Trace */
+.gpu-trace-section {
+  margin-top: 14px;
+}
+
+.gpu-trace-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+@media (max-width: 800px) {
+  .gpu-trace-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.gpu-trace-box {
+  background: #090f19;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.gpu-trace-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.gpu-trace-info h4 {
+  font-size: 13px;
