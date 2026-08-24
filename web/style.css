@@ -3057,3 +3057,136 @@ body.communications-style button { box-shadow: none !important; }
 
 .gpu-trace-info h4 {
   font-size: 13px;
+  font-weight: 700;
+  color: #f1f5f9;
+  margin: 0 0 3px;
+}
+
+.gpu-trace-info small {
+  font: 500 10px ui-monospace, monospace;
+  color: #64748b;
+}
+
+.gpu-trace-val-wrap {
+  text-align: right;
+}
+
+.gpu-trace-val {
+  font: 800 18px ui-monospace, monospace;
+  color: #f8fafc;
+  line-height: 1;
+}
+
+.gpu-trace-val small {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.gpu-trace-peak {
+  font: 600 9.5px ui-monospace, monospace;
+  color: #64748b;
+  margin-top: 3px;
+}
+
+.gpu-trace-spark-wrap {
+  width: 100%;
+  height: 38px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+/* Memory Subsystem Breakdown */
+.gpu-mem-card {
+  margin-top: 14px;
+}
+
+.gpu-mem-legend-chips {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font: 600 10px ui-monospace, monospace;
+  color: #94a3b8;
+}
+
+.gpu-mem-chip-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  margin-right: 4px;
+}
+
+.gpu-mem-chip-dot.vram { background: #38bdf8; }
+.gpu-mem-chip-dot.dynamic { background: var(--accent); }
+.gpu-mem-chip-dot.free { background: #1e293b; }
+
+.gpu-mem-bar-wrap {
+  margin: 14px 0 16px;
+}
+
+.gpu-mem-bar {
+  width: 100%;
+  height: 10px;
+  background: #111a2c;
+  border-radius: 4px;
+  overflow: hidden;
+  display: flex;
+}
+
+.gpu-mem-seg {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.gpu-mem-seg.vram { background: #38bdf8; }
+.gpu-mem-seg.dynamic { background: var(--accent); }
+.gpu-mem-seg.free { background: #1e293b; }
+
+.gpu-mem-cols {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 600px) {
+  .gpu-mem-cols {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+}
+
+.gpu-mem-col {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.gpu-mem-col-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font: 700 9.5px ui-monospace, monospace;
+  color: #64748b;
+  letter-spacing: 0.5px;
+}
+
+.gpu-mem-col-val {
+  font: 800 16px ui-monospace, monospace;
+  color: #f1f5f9;
+}
+
+.gpu-mem-col-sub {
+  font: 500 10px ui-monospace, monospace;
+  color: #64748b;
+}
+
+/* Physical Memory Composition Card */
+.ram-comp-card {
+  margin-top: 14px;
+}
+
+.ram-comp-head-right {
+  font: 700 10px ui-monospace, monospace;
+  color: #94a3b8;
+  letter-spacing: 0.5px;
