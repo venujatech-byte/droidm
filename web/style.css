@@ -3589,3 +3589,110 @@ body.communications-style button { box-shadow: none !important; }
 
 .storage-drive-bar {
   height: 100%;
+  background: #38bdf8;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.storage-drive-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.storage-drive-stat-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.storage-drive-stat-col small {
+  font: 700 9px ui-monospace, monospace;
+  color: #64748b;
+  letter-spacing: 0.5px;
+}
+
+.storage-drive-stat-col b {
+  font: 800 16px ui-monospace, monospace;
+  color: #f1f5f9;
+}
+
+/* Wi-Fi IP Config & Sockets Cards */
+/* Cellular and storage telemetry */
+.cellular-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; padding: 16px; background: var(--surface); border: 1px solid var(--surface2); border-radius: 12px; }
+.cellular-header h2 { margin: 6px 0 3px; font-size: 20px; }
+.cellular-indicator { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font: 600 11px var(--font-mono); }
+.cellular-indicator-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
+.cellular-indicator-dot.standby { background: var(--dim); }
+.cellular-traffic-grid, .cellular-sim-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+.cellular-traffic-card { display: grid; gap: 7px; min-width: 0; }
+.cellular-traffic-card .stat-card-title { display: flex; align-items: center; gap: 8px; color: var(--muted); font: 600 11px var(--font-mono); }
+.cellular-traffic-card .stat-card-title span { color: var(--accent); font-size: 18px; }
+.cellular-traffic-card > strong { font-size: clamp(24px, 3vw, 34px); letter-spacing: -.03em; }
+.cellular-traffic-card > span, .cellular-traffic-card > small { color: var(--muted); }
+.cellular-mini-chart { height: 46px; margin-top: 4px; }
+.cellular-mini-chart .stat-card-spark { width: 100%; height: 100%; }
+.cellular-sim-card { min-width: 0; padding: 16px; }
+.cellular-sim-card-head { display: flex; align-items: center; gap: 10px; padding-bottom: 12px; border-bottom: 1px solid var(--surface2); }
+.cellular-sim-icon { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); font: 700 11px var(--font-mono); }
+.cellular-sim-card-head h3, .cellular-interface-card h3 { margin: 0 0 3px; font-size: 15px; }
+.cellular-sim-carrier { padding: 14px 0; font-size: 20px; font-weight: 650; }
+.cellular-sim-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.cellular-sim-fields > div { display: grid; gap: 5px; min-width: 0; padding: 10px; background: var(--well); border-radius: 8px; }
+.cellular-sim-fields small { color: var(--muted); font: 10px var(--font-mono); text-transform: uppercase; }
+.cellular-sim-fields b { overflow-wrap: anywhere; font-size: 12px; }
+.cellular-interface-card { margin-top: 0; }
+@media (max-width: 760px) { .cellular-traffic-grid, .cellular-sim-grid { grid-template-columns: 1fr; } .cellular-header { align-items: flex-start; } }
+
+@media (max-width: 1050px) {
+  .shell { grid-template-columns: 215px minmax(0, 1fr); }
+  .content { padding: 10px; }
+  .topbar { padding: 0 12px; }
+  .grid.metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .screen-layout { grid-template-columns: 1fr; }
+  .screen-phone img { max-width: min(65vw, 420px); }
+  .comm-page { height: auto; max-height: none; overflow: visible; }
+  .comm-layout, .calls-layout { flex: 0 0 auto; height: auto; grid-template-columns: minmax(0, 1fr); align-content: start; overflow: visible; }
+  .messages-layout, .calls-layout { min-height: 0; }
+  .comm-list-pane { height: auto; max-height: 38vh; }
+  .comm-thread-pane { height: auto; min-height: 48vh; }
+  .comm-dial-pane { height: auto; }
+}
+@media (max-width: 760px) {
+  .shell { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); }
+  .sidebar { height: auto; min-height: 0; max-height: 144px; overflow: hidden; padding: 6px 8px; border-right: 0; border-bottom: none; }
+  .brand { padding: 0 3px 9px; }
+  .brand-mark { width: 31px; height: 31px; }
+  .device-label, .connection, .sidebar-footer { display: none; }
+  #device-select { margin-bottom: 8px; }
+  nav { display: flex; overflow-x: auto; overflow-y: hidden; gap: 3px; scrollbar-width: none; }
+  .nav-item { white-space: nowrap; padding: 8px 9px; }
+  .nav-divider { width: 1px; height: auto; margin: 6px 2px; }
+  .topbar { min-height: 58px; padding: 8px 10px; }
+  .top-actions .device-chip { display: none; }
+  .content { padding: 8px; }
+  .grid.metrics { gap: 8px; }
+  .card { padding: 10px; }
+  .metric-value { font-size: 20px; }
+  .hero { align-items: flex-start; flex-direction: column; }
+  .kv { grid-template-columns: 1fr 1fr; }
+  .comm-list-pane { max-height: 34vh; }
+  .comm-thread-pane { min-height: 52vh; }
+  .comm-dial-pane { padding: 18px; }
+}
+
+/* Keep power explanations available to hover, keyboard focus and touch focus. */
+.power-attribution { position: relative; }
+.power-help { position: static; display: inline-block; vertical-align: middle; }
+.power-help button { width: 24px; height: 24px; padding: 0; border: 1px solid currentColor; border-radius: 50%; background: transparent; color: var(--dim); font: inherit; cursor: help; }
+.power-help [role="tooltip"] { display: none; position: absolute; top: 52px; left: 12px; right: 12px; z-index: 20; padding: 12px; border: 1px solid var(--dim); border-radius: 8px; background: #171a22; color: #f0f0f0; font: 12px/1.5 sans-serif; font-weight: 400; }
+.power-help:hover [role="tooltip"], .power-help:focus-within [role="tooltip"] { display: block; }
+
+@media (max-width: 720px) {
+  .tm-toolbar-right { width: 100%; justify-content: flex-start; gap: 8px; }
+  .tm-search-wrap { flex: 1; min-width: 150px; }
+  .tm-search-input, .tm-search-input:focus { width: 100%; }
+  .tm-table-wrap { max-width: 100%; }
+}
