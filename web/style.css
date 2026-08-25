@@ -3323,3 +3323,136 @@ body.communications-style button { box-shadow: none !important; }
   justify-content: space-between;
   align-items: center;
   font: 600 11.5px ui-monospace, monospace;
+}
+
+.gpu-hw-item-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #f1f5f9;
+}
+
+.gpu-hw-check {
+  color: #10b981;
+  font-weight: 800;
+}
+
+.gpu-hw-badge {
+  background: rgba(16, 185, 129, 0.12);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  font: 700 8.5px ui-monospace, monospace;
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+
+.gpu-hw-badge.direct {
+  background: rgba(56, 189, 248, 0.12);
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.3);
+}
+
+/* Storage Partition Map & Topology Card */
+.storage-partition-card {
+  margin-top: 14px;
+}
+
+.storage-part-header-wrap {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.storage-part-title-sub {
+  font: 500 11px ui-monospace, monospace;
+  color: #64748b;
+  margin-left: 6px;
+}
+
+.storage-part-legend {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  font: 600 10px ui-monospace, monospace;
+  color: #94a3b8;
+}
+
+.storage-part-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.storage-part-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+}
+
+.storage-part-dot.root { background: #38bdf8; }
+.storage-part-dot.data { background: #2563eb; }
+.storage-part-dot.swap { background: #60a5fa; }
+.storage-part-dot.aux { background: #1e293b; }
+
+.storage-part-bar-wrap {
+  margin: 16px 0 18px;
+}
+
+.storage-part-bar {
+  width: 100%;
+  height: 38px;
+  background: #090f19;
+  border-radius: 6px;
+  overflow: hidden;
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-sizing: border-box;
+}
+
+.storage-part-block {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+  font: 700 10.5px ui-monospace, monospace;
+  color: #f8fafc;
+  border-radius: 3px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.storage-part-block.aux {
+  background: #1e293b;
+  color: #64748b;
+}
+
+.storage-part-block.data {
+  background: #1e40af;
+  color: #bfdbfe;
+}
+
+.storage-part-block.root {
+  background: #0284c7;
+  color: #f0f9ff;
+}
+
+.storage-part-block.swap {
+  background: #3b82f6;
+  color: #eff6ff;
+}
+
+.storage-part-cols {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
