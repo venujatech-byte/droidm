@@ -286,3 +286,147 @@
                     <span class="comm-avatar contact-avatar">${escapeHtml((contact.name || contact.number || '?').slice(0, 1).toUpperCase())}</span>
                     <span class="comm-row-copy">
                       <span class="comm-row-top">
+                        <b>${escapeHtml(contact.name || 'Unnamed')}</b>
+                      </span>
+                      <span class="comm-preview"><span class="mono">${escapeHtml(contact.number)}</span></span>
+                    </span>
+                    <button class="button tonal call-back" data-action="call" data-value="${escapeHtml(contact.number)}" aria-label="Call ${escapeHtml(contact.name)}" title="Call contact">
+                      <span class="icon">&#xe0cd;</span>
+                    </button>
+                  </article>
+                `).join('') : empty(state.contactsError ? 'Contacts unavailable' : 'No contacts found', state.contactsError || 'No saved phone numbers on this device.')}
+              </div>
+            `}
+          </section>
+
+          <section class="card comm-dial-pane">
+            <div class="dialer-title">
+              <div>
+                <h3>Call controls</h3>
+                <div class="subtle">Answer on device · route audio with Android</div>
+              </div>
+              <span class="badge">PHONE</span>
+            </div>
+
+            <div class="call-control-window">
+              <span class="call-control-avatar">${icon("e0cd")}</span>
+              <div class="call-control-copy"><b>Android call</b><span>Use device or connected headset for audio</span></div>
+              <button class="button tonal" data-action="bluetooth_auto_connect" title="Open Android Bluetooth pairing">Bluetooth</button>
+              <button class="button success tonal" data-action="answer_call" title="Answer a ringing call">Answer</button>
+              <button class="button danger tonal" data-action="hangup" title="End an ongoing call">End</button>
+            </div>
+
+            <div class="dial-input-container">
+              <input id="dial-number" class="input dial-input" placeholder="Enter phone number..." inputmode="tel" autocomplete="tel">
+              <button id="dial-backspace" class="dial-backspace-btn" title="Delete last digit">
+                <span class="icon">&#xe14a;</span>
+              </button>
+            </div>
+
+            <div class="keypad">
+              ${[
+                { k: '1', s: '' }, { k: '2', s: 'ABC' }, { k: '3', s: 'DEF' },
+                { k: '4', s: 'GHI' }, { k: '5', s: 'JKL' }, { k: '6', s: 'MNO' },
+                { k: '7', s: 'PQRS' }, { k: '8', s: 'TUV' }, { k: '9', s: 'WXYZ' },
+                { k: '*', s: '' }, { k: '0', s: '+' }, { k: '#', s: '' }
+              ].map(({ k, s }) => `
+                <button class="button key dial-key-btn" data-key="${k}" aria-label="${k}">
+                  <span class="key-digit">${k}</span>
+                  ${s ? `<span class="key-sub">${s}</span>` : ''}
+                </button>
+              `).join('')}
+            </div>
+
+            <div class="dial-actions-row">
+              <button class="button success dial-submit" id="dial-call" title="Place phone call">
+                <span class="icon">&#xe0cd;</span>
+                <span>Call</span>
+              </button>
+            </div>
+            <p class="subtle dial-note">Calls use the device SIM. Android may ask you to select a SIM or confirm.</p>
+          </section>
+        </div>
+      </div>
+    `;
+
+    document.querySelectorAll('[data-calls-subtab]').forEach(btn => {
+      btn.onclick = () => {
+        state.callsSubtab = btn.dataset.callsSubtab;
+        renderCalls();
+      };
+    });
+
+    const callFilter = $('#call-filter');
+    if (callFilter) {
+      callFilter.oninput = (e) => {
+        const q = e.target.value.toLowerCase();
+        document.querySelectorAll('.call-row').forEach(row => {
+          row.hidden = !row.textContent.toLowerCase().includes(q);
+        });
+      };
+    }
+
+    const contactFilter = $('#contact-filter');
+    if (contactFilter) {
+      contactFilter.oninput = (e) => {
+        const q = e.target.value.toLowerCase();
+        document.querySelectorAll('.contact-row').forEach(row => {
+          row.hidden = !row.textContent.toLowerCase().includes(q);
+        });
+      };
+    }
+
+    document.querySelectorAll('[data-pick-number]').forEach(row => {
+      row.onclick = (e) => {
+        if (e.target.closest('button')) return;
+        const num = row.dataset.pickNumber;
+        if (num) {
+          const input = $('#dial-number');
+          if (input) {
+            input.value = num;
+            input.focus();
+          }
+        }
+      };
+    });
+
+    document.querySelectorAll('[data-key]').forEach(k => {
+      k.onclick = () => {
+        const input = $('#dial-number');
+        if (input) {
+          input.value += k.dataset.key;
+          input.focus();
+        }
+      };
+    });
+
+    const backspaceBtn = $('#dial-backspace');
+    if (backspaceBtn) {
+      backspaceBtn.onclick = () => {
+        const input = $('#dial-number');
+        if (input && input.value.length > 0) {
+          input.value = input.value.slice(0, -1);
+          input.focus();
+        }
+      };
+    }
+
+    const callBtn = $('#dial-call');
+    if (callBtn) {
+      callBtn.onclick = async () => {
+        const input = $('#dial-number');
+        const num = input ? input.value.trim() : '';
+        if (num) {
+          callBtn.disabled = true;
+          try {
+            await action('call', num);
+          } catch (err) {
+            // action() already displays the Android error.
+          } finally {
+            callBtn.disabled = false;
+          }
+        } else {
+          toast('Enter a phone number to call.', true);
+        }
+      };
+    }
