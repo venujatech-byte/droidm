@@ -430,3 +430,147 @@
         }
       };
     }
+  }
+  function renderPhotos() {
+    document.querySelector('.photo-context-menu')?.remove();
+    const rows = state.data || [];
+    const q = (state.photosSearch || '').trim().toLowerCase();
+    const album = state.photosAlbum || 'all';
+
+    const getAlbum = (p) => {
+      const path = (p.path || '').toLowerCase();
+      const name = (p.name || '').toLowerCase();
+      if (path.includes('/screenshots/') || name.includes('screenshot')) return 'screenshots';
+      if (path.includes('/download')) return 'downloads';
+      if (path.includes('/dcim/') || path.includes('/camera/')) return 'camera';
+      return 'other';
+    };
+
+    const filtered = rows.filter(p => {
+      if (album === 'camera' && getAlbum(p) !== 'camera') return false;
+      if (album === 'screenshots' && getAlbum(p) !== 'screenshots') return false;
+      if (album === 'downloads' && getAlbum(p) !== 'downloads') return false;
+      if (q && !((p.name || '').toLowerCase().includes(q) || (p.path || '').toLowerCase().includes(q))) return false;
+      return true;
+    });
+    const visible = filtered;
+
+    const isSelected = (path) => state.photosSelected.has(path);
+    const density = state.photosDensity || 'comfortable';
+
+    content.innerHTML = `
+      <div class="photos-page">
+        <!-- Top Header Card -->
+        <header class="photos-header-card">
+          <div class="photos-header-info">
+            <h2>${icon("e0f7")} Camera Roll & Gallery</h2>
+            <div class="photos-header-sub">${state.photosTotal == null ? 'Counting photos…' : `${state.photosTotal} photos total`} · ${rows.length} loaded</div>
+          </div>
+          <div class="photos-header-actions">
+            <button class="button tonal" id="photo-upload-btn">${icon("e0cc")} Push Photo to Device</button>
+            <button class="button" data-refresh>${icon("e145")} Refresh</button>
+          </div>
+        </header>
+
+        <!-- Filter & Search Toolbar -->
+        <div class="photos-filter-bar">
+          <div class="photos-albums">
+            <button class="album-pill ${album === 'all' ? 'active' : ''}" data-album="all">${icon("e0d7")} All (${state.photosTotal ?? rows.length})</button>
+            <button class="album-pill ${album === 'camera' ? 'active' : ''}" data-album="camera">${icon("e0f7")} Camera</button>
+            <button class="album-pill ${album === 'screenshots' ? 'active' : ''}" data-album="screenshots">${icon("e14f")} Screenshots</button>
+            <button class="album-pill ${album === 'downloads' ? 'active' : ''}" data-album="downloads">${icon("e0cc")} Downloads</button>
+          </div>
+
+          <div style="display:flex; align-items:center; gap:8px;">
+            <div class="photos-search-wrap">
+              <svg class="photos-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>
+              <input id="photos-search-input" class="photos-search-input" type="search" placeholder="Search photos..." value="${escapeHtml(state.photosSearch)}">
+            </div>
+
+            <div class="density-toggle">
+              <button class="density-btn ${density === 'compact' ? 'active' : ''}" data-density="compact" title="Compact density">Compact</button>
+              <button class="density-btn ${density === 'comfortable' ? 'active' : ''}" data-density="comfortable" title="Comfortable density">Medium</button>
+              <button class="density-btn ${density === 'large' ? 'active' : ''}" data-density="large" title="Large cards">Large</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Photo Grid -->
+        ${filtered.length > 0 ? `
+          <div class="photo-grid density-${density} ${state.photosSelected.size > 0 ? 'selection-mode' : ''}">
+            ${visible.map((p) => {
+              const idx = filtered.indexOf(p);
+              const selected = isSelected(p.path);
+              const cachedSrc = state.photosThumbs[p.path];
+              const ext = (p.name.split('.').pop() || 'JPG').toUpperCase();
+              return `
+                <article class="photo-card ${selected ? 'selected' : ''}" data-photo-path="${escapeHtml(p.path)}">
+                  <div class="photo-select-box" data-photo-select="${escapeHtml(p.path)}" title="Select photo">
+                    ${selected ? icon("e10b") : ''}
+                  </div>
+                  <div class="photo-thumb-container" data-photo-view="${idx}">
+                    ${cachedSrc ? `
+                      <img class="photo-thumb-img" src="${cachedSrc}" alt="${escapeHtml(p.name)}" loading="lazy">
+                    ` : `
+                      <div class="photo-thumb-placeholder" id="thumb-holder-${idx}">
+                        ${icon("e0f7")}
+                        <span>${escapeHtml(ext)}</span>
+                      </div>
+                    `}
+                  </div>
+                </article>
+              `;
+            }).join('')}
+          </div>
+        ` : empty('No photos found', rows.length === 0 ? 'No photos returned from /sdcard/DCIM or MediaStore. Click "Push Photo to Device" to transfer images to the camera roll.' : 'No photos match your filter or search query.')}
+
+        ${state.photosHasMore ? `<div class="photos-load-more" id="photos-load-more" aria-live="polite">${state.photosPageLoading ? 'Loading more photos…' : ''}</div>` : ''}
+
+        <!-- Floating Bulk Selection Bar -->
+        ${state.photosSelected.size > 0 ? `
+          <div class="photo-floating-bar">
+            <span class="photo-selected-count">${state.photosSelected.size} selected</span>
+            <button class="button success tonal" id="bulk-download-btn">${icon("e0cc")} Save Selected</button>
+            <button class="button danger tonal" id="bulk-delete-btn">${icon("e048")} Delete Selected</button>
+            <button class="button tonal" id="bulk-clear-btn">Deselect All</button>
+          </div>
+        ` : ''}
+
+        <!-- Lightbox Modal -->
+        ${state.photosLightboxIndex !== null && filtered[state.photosLightboxIndex] ? (() => {
+          const p = filtered[state.photosLightboxIndex];
+          const cachedSrc = state.photosCache[p.path];
+          return `
+            <div class="photo-lightbox" id="photo-lightbox-modal">
+              <div class="lightbox-topbar">
+                <div class="lightbox-title-box">
+                  ${icon("e0f7")}
+                  <span class="lightbox-filename">${escapeHtml(p.name)}</span>
+                  <span class="lightbox-counter">${state.photosLightboxIndex + 1} / ${filtered.length}</span>
+                </div>
+                <div class="lightbox-actions">
+                  <button class="button" id="lightbox-close-btn">Close</button>
+                </div>
+              </div>
+
+              <div class="lightbox-stage">
+                ${state.photosLightboxIndex > 0 ? `
+                  <button class="lightbox-nav-btn prev" id="lightbox-prev-btn" title="Previous photo (←)">‹</button>
+                ` : ''}
+                <div id="lightbox-img-container" style="display:grid; place-items:center; width:100%; height:100%;">
+                  ${cachedSrc ? `
+                    <img src="${cachedSrc}" alt="${escapeHtml(p.name)}">
+                  ` : `
+                    <div class="page-loading-card" style="padding:24px 32px; max-width:320px;">
+                      <div class="loading-brand-container" style="width:68px; height:68px; margin-bottom:14px;">
+                        <img src="./icon.png" alt="Loading" class="loading-brand-logo" style="width:46px; height:46px;" onerror="this.style.display='none';" />
+                        <div class="loading-ring-pulse"></div>
+                      </div>
+                      <div class="loading-heading" style="font-size:14px;">Loading photo…</div>
+                      <div class="loading-subtext">Fetching original bytes from Android storage</div>
+                    </div>
+                  `}
+                </div>
+                ${state.photosLightboxIndex < filtered.length - 1 ? `
+                  <button class="lightbox-nav-btn next" id="lightbox-next-btn" title="Next photo (→)">›</button>
+                ` : ''}
