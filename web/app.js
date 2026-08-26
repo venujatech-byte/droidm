@@ -142,3 +142,147 @@
       state.data = reset ? page.items : state.data.concat(page.items);
       state.photosCursor = page.next_cursor;
       state.photosHasMore = Boolean(page.next_cursor);
+    } catch (error) {
+      toast(String(error), true);
+    } finally {
+      state.photosPageLoading = false;
+    }
+  }
+  async function action(action, value = '', extra = '') {
+    try { const result = await invokeOrFail('adb_action', { serial: state.serial, action, value: value || null, extra: extra || null }); if (result && !['shell', 'clipboard_get', 'pick_file', 'pick_folder', 'save_file'].includes(action)) toast(result); return result; }
+    catch (error) { toast(String(error), true); throw error; }
+  }
+  const empty = (title, detail) => `<div class="empty"><div class="empty-icon">${icon("e0f9")}</div><b>${escapeHtml(title)}</b><span>${escapeHtml(detail)}</span></div>`;
+  const card = (title, body, tools = '') => `<section class="card"><div class="card-head"><h2>${title}</h2><div>${tools}</div></div>${body}</section>`;
+  const metric = (label, value, note, pct) => `<article class="card"><div class="metric-label">${label}</div><div class="metric-value">${value}</div><div class="metric-note">${note}</div>${pct == null ? '' : `<div class="progress"><i style="width:${Math.max(0, Math.min(100, pct))}%"></i></div>`}</article>`;
+  function overview() {
+    const t = state.telemetry || {}, battery = t.battery_pct;
+    const used = t.storage_internal_total_gb && t.storage_internal_free_gb != null ? Math.max(0, 100 * (1 - t.storage_internal_free_gb / t.storage_internal_total_gb)) : null;
+    return `<section class="card hero"><div><span class="badge">● ${escapeHtml(state.device?.state || 'device')}</span><h2>${escapeHtml(t.model || state.device?.model || state.serial)}</h2><div class="subtle">${escapeHtml(t.manufacturer || 'Android device')} · ${escapeHtml(state.serial)} · Android ${escapeHtml(val(t.android_version))}</div></div><div class="hero-actions"><button class="button tonal" data-tab="screen">${icon("e14f")} Screen share</button><button class="button primary" data-action="scrcpy">${icon("e0b9")} Open scrcpy</button><button class="button" data-action="reboot" data-value="system">${icon("e145")} Restart</button></div></section>
+      <div class="grid metrics">${metric('Battery', val(battery, '%'), val(t.battery_status), battery)}${metric('Internal storage', t.storage_internal_total_gb != null ? `${(t.storage_internal_total_gb - (t.storage_internal_free_gb || 0)).toFixed(1)} GB` : 'Unavailable', t.storage_internal_total_gb != null ? `${(t.storage_internal_free_gb ?? 0).toFixed(1)} GB free` : 'Device data unavailable', used)}${metric('Display', escapeHtml(val(t.screen_res)), escapeHtml(val(t.screen_dpi)), null)}${metric('Uptime', t.uptime_secs ? `${Math.floor(t.uptime_secs / 3600)}h ${Math.floor(t.uptime_secs % 3600 / 60)}m` : 'Unavailable', `${escapeHtml(val(t.cpu_abi))} · API ${escapeHtml(val(t.api_level))}`, null)}</div>
+      <div class="grid two">${card('Device information', `<div class="kv"><div><small>Brand</small><b>${escapeHtml(val(t.brand))}</b></div><div><small>Build</small><b>${escapeHtml(val(t.build_id))}</b></div><div><small>Security patch</small><b>${escapeHtml(val(t.security_patch))}</b></div><div><small>SELinux</small><b>${escapeHtml(val(t.selinux))} · ${t.is_rooted ? 'Rooted' : 'Unrooted'}</b></div></div>`)}${card('ADB connection', `<div class="kv"><div><small>Transport</small><b>${state.serial.includes(':') ? 'Wireless TCP/IP' : 'USB debugging'}</b></div><div><small>Product</small><b>${escapeHtml(val(state.device?.product))}</b></div><div><small>Device ID</small><b class="mono">${escapeHtml(state.serial)}</b></div><div><small>Refresh cadence</small><b>On demand · low overhead</b></div></div>`)}</div>`;
+  }
+  async function renderTab() {
+    if (!state.device) return;
+    const loadToken = ++currentLoadToken;
+    const targetTab = state.tab;
+    if (targetTab === 'overview') { content.innerHTML = overview(); return; }
+    if (tabKinds[targetTab]) {
+      showPageLoading(tabNames[targetTab]);
+      if (targetTab === 'photos') await loadPhotoPage(true);
+      else if (targetTab === 'storage' && state.filesView === 'drives') state.data = [];
+      else await loadData(tabKinds[targetTab], state.path);
+      if (loadToken !== currentLoadToken || state.tab !== targetTab) return;
+    }
+    if (!state.device || state.tab !== targetTab) return;
+    switch (targetTab) {
+      case 'screen': return renderScreen();
+      case 'messages': return renderMessages();
+      case 'calls': return renderCalls();
+      case 'photos': return renderPhotos();
+      case 'notifications': return renderNotifications();
+      case 'sensors': return renderSensors();
+      case 'hardware-sensors': return renderHardwareSensors();
+      case 'storage': return renderStorage();
+      case 'apps': return renderApps();
+      case 'clipboard': return renderClipboard();
+      case 'terminal': return renderTerminal();
+      case 'wireless': return renderWireless();
+      case 'firmware': return renderFirmware();
+    }
+  }
+  function renderScreen() {
+    content.innerHTML = `<div class="screen-layout"><section class="card screen-stage"><div class="screen-phone" id="screen-image">${empty('Screen capture ready', 'Use Refresh to fetch the current device screen.')}</div></section><div class="stack"><section class="card"><div class="card-head"><h2>Screen controls</h2></div><div class="toolbar"><button class="button primary" id="screen-refresh">${icon("e145")} Refresh screen</button><button class="button tonal" data-action="scrcpy">Open scrcpy</button></div><div class="screen-controls"><button class="button" data-action="key_back">${icon("e048")} Back</button><button class="button" data-action="key_home">${icon("e101")} Home</button><button class="button" data-action="key_recents">${icon("e101")} Recent</button><button class="button" data-action="key_volume_down">Vol −</button><button class="button" data-action="key_volume_up">Vol +</button><button class="button" data-action="key_power">Power</button></div><div class="form-row" style="margin-top:12px"><input class="input" id="screen-text" placeholder="Type text on device…"><button class="button" id="send-screen-text">Send</button></div></section><section class="card"><h3>Mirror options</h3><p class="subtle">For smooth interactive control, scrcpy runs in its own optimized window. Static screen preview refreshes every 3 seconds while this tab is active.</p></section></div></div>`;
+    const take = async () => { const target = $('#screen-image'); if (!target || !state.serial) return; try { const src = await invokeOrFail('adb_screenshot', { serial: state.serial }); target.innerHTML = `<img alt="Current Android screen" src="${src}">`; } catch (e) { target.innerHTML = `<div class="muted">${escapeHtml(e)}</div>`; } };
+    $('#screen-refresh').onclick = take; void take(); state.screenTimer = setInterval(take, 3000);
+    $('#send-screen-text').onclick = async () => { const text = $('#screen-text').value; if (text) await action('send_text', text); };
+  }
+  function renderMessages() {
+    const rows = state.data || [];
+    const conversations = [...rows.reduce((groups, message) => {
+      const address = message.address || 'Unknown contact';
+      if (!groups.has(address)) groups.set(address, []);
+      groups.get(address).push(message);
+      return groups;
+    }, new Map())].map(([address, messages]) => ({ address, messages, latest: messages[0] }));
+    if (!conversations.some((conversation) => conversation.address === state.messageAddress)) state.messageAddress = conversations[0]?.address || '';
+    const selected = conversations.find((conversation) => conversation.address === state.messageAddress);
+    content.innerHTML = `<div class="comm-page"><div class="comm-layout messages-layout"><section class="card comm-list-pane"><div class="card-head"><div><h3>Conversations</h3><span class="subtle">${conversations.length} threads · ${rows.length} messages</span></div></div><input id="message-filter" class="input" type="search" placeholder="Search conversations" aria-label="Search conversations"><div class="comm-list">${conversations.length ? conversations.map((conversation) => `<button class="comm-row ${conversation.address === state.messageAddress ? 'selected' : ''}" data-message-address="${escapeHtml(conversation.address)}"><span class="comm-avatar">${escapeHtml((conversation.latest.contact || conversation.address).slice(0, 1).toUpperCase())}</span><span class="comm-row-copy"><span class="comm-row-top"><b>${escapeHtml(conversation.latest.contact || conversation.address)}</b><time>${escapeHtml(conversation.latest.time)}</time></span><span class="comm-preview">${conversation.latest.outgoing ? 'You: ' : ''}${escapeHtml(conversation.latest.text)}</span></span></button>`).join('') : empty('No messages available', 'SMS conversations will appear here when the device provides them.')}</div></section><section class="card comm-thread-pane">${selected ? `<div class="thread-head"><span class="comm-avatar">${escapeHtml((selected.latest.contact || selected.address).slice(0, 1).toUpperCase())}</span><div><h3>${escapeHtml(selected.latest.contact || selected.address)}</h3><span class="subtle">${escapeHtml(selected.address)}</span></div></div><div class="message-thread">${selected.messages.slice().reverse().map((message) => `<article class="message-bubble ${message.outgoing ? 'outgoing' : 'incoming'}"><p>${escapeHtml(message.text)}</p><time>${escapeHtml(message.time)}</time></article>`).join('')}</div><form id="sms-form" class="message-composer"><label class="subtle" for="sms-number">To</label><input id="sms-number" class="input" value="${escapeHtml(selected.address)}" aria-label="Recipient phone number"><div class="composer-row"><textarea id="sms-body" class="input" rows="2" placeholder="Write a message…" aria-label="Message"></textarea><button class="button primary" id="sms-send" type="submit">${icon("e1e0")} Open SMS app</button></div><span class="subtle">Review and send in your device’s messaging app. Carrier charges may apply.</span></form>` : `<div class="thread-empty">${empty('Select a conversation', 'Choose a conversation to read or reply.')}</div>`}</section></div></div>`;
+    $('#message-filter').oninput = (event) => document.querySelectorAll('.comm-row').forEach((row) => { row.hidden = !row.textContent.toLowerCase().includes(event.target.value.toLowerCase()); });
+    document.querySelectorAll('[data-message-address]').forEach((button) => button.onclick = () => { state.messageAddress = button.dataset.messageAddress; renderMessages(); });
+    $('#sms-form')?.addEventListener('submit', async (event) => { event.preventDefault(); const number = $('#sms-number').value.trim(), body = $('#sms-body').value.trim(); if (!number || !body) return toast('Enter a number and message.', true); const send = $('#sms-send'); send.disabled = true; try { await action('send_sms', number, body); } catch {} finally { if ($('#sms-send')) $('#sms-send').disabled = false; } });
+  }
+  async function renderCalls() {
+    const rows = state.data || [];
+    if (!state.contacts || state.contactsSerial !== state.serial) {
+      const serial = state.serial;
+      try {
+        const contacts = await invokeOrFail('adb_data', { serial, section: 'contacts', path: null }) || [];
+        if (serial !== state.serial || state.tab !== 'calls') return;
+        state.contacts = contacts;
+        state.contactsSerial = serial;
+        state.contactsError = '';
+      } catch (error) {
+        if (serial !== state.serial || state.tab !== 'calls') return;
+        state.contacts = [];
+        state.contactsSerial = serial;
+        state.contactsError = String(error);
+      }
+    }
+    const contacts = state.contacts || [];
+    const subtab = state.callsSubtab || 'contacts';
+
+    content.innerHTML = `
+      <div class="comm-page">
+        <div class="comm-layout calls-layout">
+          <section class="card comm-list-pane">
+            <div class="comm-tab-pills">
+              <button class="comm-tab-pill ${subtab === 'calls' ? 'active' : ''}" data-calls-subtab="calls">
+                <span class="icon">&#xe0b0;</span>
+                <span>Recent Calls (${rows.length})</span>
+              </button>
+              <button class="comm-tab-pill ${subtab === 'contacts' ? 'active' : ''}" data-calls-subtab="contacts">
+                <span class="icon">&#xe7fd;</span>
+                <span>Contacts (${contacts.length})</span>
+              </button>
+            </div>
+
+            ${subtab === 'calls' ? `
+              <div class="card-head" style="margin-top: 4px;">
+                <div>
+                  <h3>Recent Calls History</h3>
+                  <span class="subtle">${rows.length} call records logged</span>
+                </div>
+              </div>
+              <input id="call-filter" class="input" type="search" placeholder="Search recent calls..." aria-label="Search recent calls">
+              <div id="call-list" class="comm-list">
+                ${rows.length ? rows.map((call) => `
+                  <article class="comm-row call-row" data-pick-number="${escapeHtml(call.number)}">
+                    <span class="comm-avatar call-avatar">${icon(call.kind === 'Missed' ? 'e11b' : 'e135')}</span>
+                    <span class="comm-row-copy">
+                      <span class="comm-row-top">
+                        <b>${escapeHtml(call.name || call.number || 'Unknown caller')}</b>
+                        <time>${escapeHtml(call.time)}</time>
+                      </span>
+                      <span class="comm-preview">${escapeHtml(call.kind)} · ${escapeHtml(call.duration)} · ${escapeHtml(call.number)}</span>
+                    </span>
+                    <button class="button tonal call-back" data-action="call" data-value="${escapeHtml(call.number)}" aria-label="Call ${escapeHtml(call.name || call.number)}" title="Call back">
+                      <span class="icon">&#xe0cd;</span>
+                    </button>
+                  </article>
+                `).join('') : empty('No call history', 'Recent calls will appear here when recorded on the device.')}
+              </div>
+            ` : `
+              <div class="card-head" style="margin-top: 4px;">
+                <div>
+                  <h3>Device Contacts</h3>
+                  <span class="subtle">${contacts.length} entries in address book</span>
+                </div>
+              </div>
+              <input id="contact-filter" class="input" type="search" placeholder="Search contacts by name or phone..." aria-label="Search contacts">
+              <div id="contact-list" class="comm-list">
+                ${contacts.length ? contacts.map((contact) => `
+                  <article class="comm-row contact-row" data-pick-number="${escapeHtml(contact.number)}">
+                    <span class="comm-avatar contact-avatar">${escapeHtml((contact.name || contact.number || '?').slice(0, 1).toUpperCase())}</span>
+                    <span class="comm-row-copy">
+                      <span class="comm-row-top">
