@@ -1006,3 +1006,147 @@
             return;
           }
           if (command === 'paste' && state.filesClipboard) {
+            const destination = `${isDirectory ? path : normalizedPath}/`;
+            await runFileAction(state.filesClipboard.cut ? 'move_file' : 'copy_file', state.filesClipboard.path, destination);
+            if (state.filesClipboard.cut) { state.filesClipboard = null; renderStorage(); }
+            return;
+          }
+          if (command === 'export') await exportPath(path, file.name);
+          } catch { /* The shared action helper already reports transfer errors. */ }
+        };
+      };
+    });
+    const thumbNodes = [...document.querySelectorAll('[data-file-thumb]')];
+    state.filesThumbObserver?.disconnect();
+    const thumbnailSerial = state.serial;
+    const loadingThumbs = state.filesThumbLoading;
+    state.filesThumbObserver = new IntersectionObserver((entries) => entries.forEach(async (entry) => {
+      if (!entry.isIntersecting) return;
+      const image = entry.target, path = image.dataset.fileThumb;
+      state.filesThumbObserver?.unobserve(image);
+      if (state.filesThumbs[path]) { image.src = state.filesThumbs[path]; return; }
+      if (loadingThumbs.has(path)) return;
+      loadingThumbs.add(path);
+      try {
+        const thumbnail = await invokeOrFail('adb_photo_thumbnail', { serial: thumbnailSerial, path });
+        if (thumbnailSerial === state.serial) state.filesThumbs[path] = thumbnail;
+        if (image.isConnected) image.src = thumbnail;
+      } catch { if (image.isConnected) image.parentElement.innerHTML = icon('e0cc'); }
+      finally { loadingThumbs.delete(path); }
+    }), { root: content, rootMargin: '160px' });
+    thumbNodes.forEach((image) => state.filesThumbObserver.observe(image));
+    $('#files-import').onclick = async () => {
+      try {
+        const localPath = await action('pick_file');
+        await action('push_file', localPath, `${normalizedPath}/`);
+        await refreshFiles();
+      } catch (error) { if (!String(error).toLowerCase().includes('cancel')) toast(String(error), true); }
+    };
+    const exportPath = async (path, name) => {
+      try {
+        const directory = byPath.get(path)?.directory;
+        const destination = directory ? await action('pick_folder') : await action('save_file', name);
+        state.filesExporting = name;
+        renderStorage();
+        await action(directory ? 'pull_folder' : 'pull_file', path, destination);
+        toast(`Exported ${name}`);
+      } catch (error) { if (!String(error).toLowerCase().includes('cancel')) toast(String(error), true); }
+      finally { state.filesExporting = ''; renderStorage(); }
+    };
+    $('#files-export').onclick = () => selected && void exportPath(state.filesSelectedPath, selected.name);
+  }
+  function renderApps() {
+    const rows = state.data || [];
+    content.innerHTML = `<section class="card apps-card"><div class="apps-sticky"><div class="card-head"><div><h2>Installed apps</h2><div class="subtle" style="margin-top:5px">${rows.length} user apps</div></div><button class="button" data-refresh>${icon("e145")} Refresh</button></div><div class="toolbar"><input id="app-filter" class="input" placeholder="Filter package name" aria-label="Filter installed apps"></div></div>${rows.length ? `<div class="installed-app-list">${rows.map((a) => `<article class="app-row installed-app-row"><code class="installed-app-package" title="${escapeHtml(a.name)}">${escapeHtml(a.name)}</code><div class="installed-app-actions"><button class="button tonal" data-action="launch_app" data-value="${escapeHtml(a.name)}">Open</button><button class="button danger" data-action="stop_app" data-value="${escapeHtml(a.name)}">Force stop</button></div></article>`).join('')}</div>` : `<div class="installed-app-empty">${empty('No apps returned', 'Could not read the user app list.')}</div>`}</section>`;
+    $('#app-filter').oninput = e => document.querySelectorAll('.app-row').forEach(r => r.hidden = !r.textContent.toLowerCase().includes(e.target.value.toLowerCase()));
+  }
+  async function renderClipboard() {
+    content.innerHTML = `<section class="card"><div class="card-head"><div><h2>Clipboard</h2><div class="subtle" style="margin-top:5px">Read or send text to the Android clipboard</div></div></div><div class="stack"><textarea id="clipboard-text" placeholder="Clipboard text…"></textarea><div class="toolbar"><button id="clipboard-read" class="button">Read device clipboard</button><button id="clipboard-send" class="button primary">Send to device</button></div></div></section>`;
+    $('#clipboard-read').onclick = async () => { try { $('#clipboard-text').value = await action('clipboard_get'); } catch {} };
+    $('#clipboard-send').onclick = async () => { await action('clipboard_set', $('#clipboard-text').value); };
+  }
+  function renderTerminal() {
+    content.innerHTML = `<section class="card"><div class="card-head"><div><h2>ADB shell</h2><div class="subtle" style="margin-top:5px">Commands run on the selected device over the local ADB bridge.</div></div><button class="button" id="external-adb-shell">${icon('e14f')} Open external shell</button></div><form id="shell-form" class="form-row"><input id="shell-command" class="input mono" placeholder="getprop ro.build.version.release" autocomplete="off"><button class="button primary">Run</button></form><pre id="shell-output" class="console" style="margin-top:14px">Ready. Output appears here.</pre></section>`;
+    $('#external-adb-shell').onclick = async () => { try { await action('external_adb_shell'); } catch {} };
+    $('#shell-form').onsubmit = async e => { e.preventDefault(); const cmd=$('#shell-command').value.trim(); if(!cmd)return; const out=$('#shell-output'); out.textContent=`$ ${cmd}\nRunning…`; try { out.textContent=`$ ${cmd}\n${await action('shell',cmd) || '(completed)'}`; } catch(err) { out.textContent=`$ ${cmd}\n${err}`; } };
+  }
+  function renderWireless() {
+    const rows=state.data||[];
+    content.innerHTML=`<div class="grid two"><section class="card"><div class="card-head"><div><h2>Wireless debugging</h2><div class="subtle" style="margin-top:5px">Switch the selected USB device to ADB over TCP/IP.</div></div></div><div class="stack"><div class="notice">Enabling TCP/IP debugging exposes ADB on the local network until you switch back to USB or reboot. Use this only on a trusted network.</div><div class="toolbar"><button class="button primary" data-action="wireless_on">Enable TCP/IP · 5555</button><button class="button" data-action="wireless_off">Switch back to USB</button><button id="endpoint-refresh" class="button">Refresh addresses</button></div></div></section><section class="card"><div class="card-head"><h2>Device network addresses</h2></div><div class="stack">${rows.length?rows.map(e=>`<article class="list-item"><div class="list-title">${escapeHtml(e.label)}</div><div class="mono muted" style="margin-top:5px">${escapeHtml(e.ip)} · ${escapeHtml(e.interface)}</div></article>`).join(''):empty('No network addresses', 'Connect the device to a network and refresh addresses.')}</div></section></div>`;
+    $('#endpoint-refresh').onclick=()=>void renderTab();
+  }
+  async function renderFirmware() {
+    const subtab = state.customSubtab || 'boot';
+    const t = state.telemetry || {};
+
+    let subtabHtml = '';
+
+    if (subtab === 'boot') {
+      subtabHtml = `
+        <div class="boot-modes-grid">
+          <div class="boot-mode-card">
+            <div class="boot-mode-top">
+              <span class="icon" style="color:var(--accent); font-size:18px;">&#xe145;</span>
+              <span class="boot-mode-title">System Reboot</span>
+            </div>
+            <p class="boot-mode-desc">Standard graceful restart of Android OS and running services.</p>
+            <button class="boot-mode-btn system" data-reboot-target="system">${icon("e145")} Reboot System</button>
+          </div>
+
+          <div class="boot-mode-card">
+            <div class="boot-mode-top">
+              <span class="icon" style="color:#38bdf8; font-size:18px;">&#xe048;</span>
+              <span class="boot-mode-title">Recovery Mode</span>
+            </div>
+            <p class="boot-mode-desc">Reboot to TWRP, OrangeFox, or Stock Recovery for flashing ROMs, wiping caches, or factory resets.</p>
+            <button class="boot-mode-btn recovery" data-reboot-target="recovery">${icon("e048")} Boot Recovery</button>
+          </div>
+
+          <div class="boot-mode-card">
+            <div class="boot-mode-top">
+              <span class="icon" style="color:#fbbf24; font-size:18px;">&#xe0cc;</span>
+              <span class="boot-mode-title">Bootloader / Fastboot</span>
+            </div>
+            <p class="boot-mode-desc">Enter low-level Fastboot mode for partition flashing (boot, recovery, vbmeta) and unlocking.</p>
+            <button class="boot-mode-btn bootloader" data-reboot-target="bootloader">${icon("e0cc")} Bootloader (Fastboot)</button>
+          </div>
+
+          <div class="boot-mode-card">
+            <div class="boot-mode-top">
+              <span class="icon" style="color:#c084fc; font-size:18px;">&#xe14f;</span>
+              <span class="boot-mode-title">Fastbootd (Dynamic Partitions)</span>
+            </div>
+            <p class="boot-mode-desc">Userspace fastboot mode on Android 10+ for resizing and flashing dynamic logical partitions.</p>
+            <button class="boot-mode-btn fastbootd" data-reboot-target="fastboot">${icon("e14f")} Reboot Fastbootd</button>
+          </div>
+
+          <div class="boot-mode-card">
+            <div class="boot-mode-top">
+              <span class="icon" style="color:#f87171; font-size:18px;">&#xe000;</span>
+              <span class="boot-mode-title">EDL Mode (Qualcomm 9008)</span>
+            </div>
+            <p class="boot-mode-desc">Emergency Download mode for unbricking and deep raw flashing on Qualcomm Snapdragon chipsets.</p>
+            <button class="boot-mode-btn edl" data-reboot-target="edl">${icon("e000")} Reboot EDL (9008)</button>
+          </div>
+
+          <div class="boot-mode-card">
+            <div class="boot-mode-top">
+              <span class="icon" style="color:#60a5fa; font-size:18px;">&#xe0b9;</span>
+              <span class="boot-mode-title">Sideload Mode</span>
+            </div>
+            <p class="boot-mode-desc">Directly enter Recovery ADB Sideload state for applying unsigned or signed firmware update zips.</p>
+            <button class="boot-mode-btn sideload" data-reboot-target="sideload">${icon("e0b9")} Reboot Sideload</button>
+          </div>
+
+          <div class="boot-mode-card">
+            <div class="boot-mode-top">
+              <span class="icon" style="color:#fb923c; font-size:18px;">&#xe11b;</span>
+              <span class="boot-mode-title">Safe Mode</span>
+            </div>
+            <p class="boot-mode-desc">Boots the system with all third-party applications suppressed to diagnose bootloops and crashes.</p>
+            <button class="boot-mode-btn safemode" data-reboot-target="safemode">${icon("e11b")} Boot Safe Mode</button>
+          </div>
+
+          <div class="boot-mode-card">
+            <div class="boot-mode-top">
+              <span class="icon" style="color:#fca5a5; font-size:18px;">&#xe14c;</span>
