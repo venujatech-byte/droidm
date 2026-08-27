@@ -718,3 +718,147 @@
           state.photosSelected.add(path);
         }
         renderPhotos();
+      };
+    });
+
+    // 8. Bulk action bar
+    const bulkDownload = $('#bulk-download-btn');
+    if (bulkDownload) {
+      bulkDownload.onclick = async () => {
+        const paths = Array.from(state.photosSelected);
+        toast(`Saving ${paths.length} photos to PC Downloads...`);
+        for (const p of paths) {
+          try { await action('download_photo', p); } catch {}
+        }
+        toast(`Exported ${paths.length} photos!`);
+      };
+    }
+
+    const bulkDelete = $('#bulk-delete-btn');
+    if (bulkDelete) {
+      bulkDelete.onclick = async () => {
+        const paths = Array.from(state.photosSelected);
+        if (confirm(`Permanently delete ${paths.length} selected photos from your device?`)) {
+          for (const p of paths) {
+            try {
+              await action('delete_photo', p);
+              delete state.photosCache[p];
+            } catch {}
+          }
+          state.photosSelected.clear();
+          toast(`Deleted ${paths.length} photos.`);
+          await loadPhotoPage(true);
+          renderPhotos();
+        }
+      };
+    }
+
+    const bulkClear = $('#bulk-clear-btn');
+    if (bulkClear) {
+      bulkClear.onclick = () => {
+        state.photosSelected.clear();
+        renderPhotos();
+      };
+    }
+
+    // 9. Lightbox controls
+    const lightboxModal = $('#photo-lightbox-modal');
+    if (lightboxModal && state.photosLightboxIndex !== null) {
+      const closeLb = () => { state.photosLightboxIndex = null; renderPhotos(); };
+
+      const closeBtn = $('#lightbox-close-btn');
+      if (closeBtn) closeBtn.onclick = closeLb;
+
+      const prevBtn = $('#lightbox-prev-btn');
+      if (prevBtn) {
+        prevBtn.onclick = () => {
+          if (state.photosLightboxIndex > 0) {
+            state.photosLightboxIndex--;
+            renderPhotos();
+            const prevP = filtered[state.photosLightboxIndex];
+            if (prevP && !state.photosCache[prevP.path]) {
+              invokeOrFail('adb_photo_preview', { serial: state.serial, path: prevP.path }).then(src => {
+                state.photosCache[prevP.path] = src;
+                const container = $('#lightbox-img-container');
+                if (container) container.innerHTML = `<img src="${src}" alt="${escapeHtml(prevP.name)}">`;
+              });
+            }
+          }
+        };
+      }
+
+      const nextBtn = $('#lightbox-next-btn');
+      if (nextBtn) {
+        nextBtn.onclick = () => {
+          if (state.photosLightboxIndex < filtered.length - 1) {
+            state.photosLightboxIndex++;
+            renderPhotos();
+            const nextP = filtered[state.photosLightboxIndex];
+            if (nextP && !state.photosCache[nextP.path]) {
+              invokeOrFail('adb_photo_preview', { serial: state.serial, path: nextP.path }).then(src => {
+                state.photosCache[nextP.path] = src;
+                const container = $('#lightbox-img-container');
+                if (container) container.innerHTML = `<img src="${src}" alt="${escapeHtml(nextP.name)}">`;
+              });
+            }
+          }
+        };
+      }
+
+      const keyHandler = (e) => {
+        if (state.photosLightboxIndex === null) {
+          window.removeEventListener('keydown', keyHandler);
+          return;
+        }
+        if (e.key === 'Escape') {
+          closeLb();
+        } else if (e.key === 'ArrowLeft' && prevBtn) {
+          prevBtn.click();
+        } else if (e.key === 'ArrowRight' && nextBtn) {
+          nextBtn.click();
+        }
+      };
+      if (window.__photoKeyHandler) window.removeEventListener('keydown', window.__photoKeyHandler);
+      window.__photoKeyHandler = keyHandler;
+      window.addEventListener('keydown', keyHandler);
+    }
+    void loadPhotoThumbnails(visible);
+  }
+
+  async function loadPhotoThumbnails(photos) {
+    const serial = state.serial;
+    const loadOne = async (photo) => {
+      if (state.photosThumbs[photo.path] || state.photosThumbLoading.has(photo.path)) return;
+      state.photosThumbLoading.add(photo.path);
+      try {
+        const src = await invokeOrFail('adb_photo_thumbnail', { serial, path: photo.path });
+        if (serial !== state.serial) return;
+        state.photosThumbs[photo.path] = src;
+        const card = [...document.querySelectorAll('.photo-card')].find((item) => item.dataset.photoPath === photo.path);
+        const holder = card?.querySelector('.photo-thumb-placeholder');
+        if (holder) {
+          const image = document.createElement('img');
+          image.className = 'photo-thumb-img'; image.alt = photo.name; image.loading = 'lazy'; image.src = src;
+          holder.replaceWith(image);
+        }
+      } catch {
+        // Keep the file-type placeholder when this image cannot be decoded.
+      } finally {
+        state.photosThumbLoading.delete(photo.path);
+      }
+    };
+    for (let index = 0; index < photos.length; index += 2) {
+      await Promise.all(photos.slice(index, index + 2).map(loadOne));
+    }
+  }
+  function renderNotifications() {
+    const rows = state.data || [];
+    const packageLabels = {
+      'com.whatsapp.w4b': 'WhatsApp Business',
+      'com.whatsapp': 'WhatsApp',
+      'com.google.android.gm': 'Gmail',
+      'com.google.android.apps.messaging': 'Messages',
+      'com.samsung.android.messaging': 'Samsung Messages',
+      'com.android.mms': 'Messages',
+      'com.android.phone': 'Phone',
+      'com.google.android.dialer': 'Phone',
