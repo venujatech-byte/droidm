@@ -862,3 +862,147 @@
       'com.android.mms': 'Messages',
       'com.android.phone': 'Phone',
       'com.google.android.dialer': 'Phone',
+      'com.android.systemui': 'Android System',
+      'com.google.android.calendar': 'Calendar',
+      'com.google.android.youtube': 'YouTube',
+      'com.android.chrome': 'Chrome',
+      'com.google.android.googlequicksearchbox': 'Google'
+    };
+    const appLabel = (notification) => packageLabels[notification.package] || notification.app || notification.package || 'Android app';
+    const appIcon = (notification) => {
+      const pkg = String(notification.package || '').toLowerCase();
+      if (pkg.includes('whatsapp') || pkg.includes('messaging') || pkg.includes('.mms')) return 'e575';
+      if (pkg.includes('gmail') || pkg.includes('email')) return 'e10f';
+      if (pkg.includes('calendar')) return 'e063';
+      if (pkg.includes('dialer') || pkg.includes('.phone')) return 'e134';
+      if (pkg.includes('systemui') || pkg === 'android') return 'e163';
+      if (pkg.includes('youtube')) return 'e13c';
+      if (pkg.includes('chrome') || pkg.includes('browser')) return 'e0e8';
+      if (pkg.includes('music')) return 'e34a';
+      return 'e224';
+    };
+    content.innerHTML = `<section class="notifications-page"><header class="notifications-toolbar"><div class="notifications-total"><strong>${rows.length}</strong><span>active notifications</span></div><button class="button" data-refresh>${icon('e145')} Refresh</button></header>${rows.length ? `<div class="notifications-list">${rows.map((n) => {
+      const app = appLabel(n);
+      const title = n.title || n.text || app;
+      const preview = n.title ? (n.text || n.subtext) : n.subtext;
+      return `<article class="notification-item"><span class="notification-app-icon" aria-hidden="true">${icon(appIcon(n))}</span><div class="notification-copy"><div class="notification-heading"><strong>${escapeHtml(title)}</strong><time>${escapeHtml(n.time || 'Recent')}</time></div><div class="notification-source"><span>${escapeHtml(app)}</span><code title="Android package">${escapeHtml(n.package)}</code></div>${preview ? `<p>${escapeHtml(preview)}</p>` : ''}</div></article>`;
+    }).join('')}</div>` : empty('No active notifications', 'The device did not report any currently posted notifications.')}</section>`;
+  }
+  async function renderStorage() {
+    const t = state.telemetry || {};
+    if (state.filesView !== 'explorer') {
+      if (state.storageVolumesSerial !== state.serial) {
+        try { state.storageVolumes = await invokeOrFail('adb_storage_volumes', { serial: state.serial }); }
+        catch { state.storageVolumes = []; }
+        state.storageVolumesSerial = state.serial;
+      }
+      const volumes = state.storageVolumes?.length ? state.storageVolumes : (t.storage_internal_total_gb != null ? [{ name: 'Internal storage', path: '/sdcard', total_kb: t.storage_internal_total_gb * 1024 * 1024, free_kb: (t.storage_internal_free_gb || 0) * 1024 * 1024 }] : []);
+      content.innerHTML = `<div class="files-home"><header class="files-home-heading"><div><h2>Storage locations</h2><span class="subtle">${volumes.length} mounted ${volumes.length === 1 ? 'volume' : 'volumes'}</span></div></header><div class="files-drive-grid">${volumes.map((volume, index) => { const total = volume.total_kb / 1024 / 1024, free = volume.free_kb / 1024 / 1024, usedPct = total ? Math.max(0, Math.min(100, 100 * (total - free) / total)) : 0; return `<button class="files-drive-card" data-storage-volume="${index}"><span class="files-drive-icon">${icon("e0c5")}</span><span class="files-drive-copy"><b>${escapeHtml(volume.name)}</b><span>${free.toFixed(1)} GB free of ${total.toFixed(1)} GB</span><i><em style="width:${usedPct}%"></em></i></span><span class="files-drive-chevron">${icon("e0a6")}</span></button>`; }).join('') || empty('No storage volumes', 'The device did not report any browseable storage.')}</div></div>`;
+      document.querySelectorAll('[data-storage-volume]').forEach((button) => button.onclick = () => {
+        const volume = volumes[Number(button.dataset.storageVolume)];
+        state.storageRootPath = volume.path; state.path = volume.path; state.filesView = 'explorer'; state.filesSelectedPath = '';
+        showPageLoading('Files'); void renderTab();
+      });
+      return;
+    }
+
+    const rows = state.data || [];
+    const normalizedPath = state.path.replace(/\/$/, '') || '/';
+    const byPath = new Map(rows.map((file) => [`${normalizedPath}/${file.name}`, file]));
+    const selected = byPath.get(state.filesSelectedPath);
+    const visibleRows = rows.filter((file) => (state.filesShowHidden || !file.name.startsWith('.')) && file.name.toLowerCase().includes(state.filesSearch.toLowerCase()));
+    const extension = (name) => name.split('.').pop().toLowerCase();
+    visibleRows.sort((a, b) => {
+      if (a.directory !== b.directory) return a.directory ? -1 : 1;
+      if (state.filesSort === 'size') return b.bytes - a.bytes;
+      if (state.filesSort === 'type') return extension(a.name).localeCompare(extension(b.name)) || a.name.localeCompare(b.name);
+      if (state.filesSort === 'modified-newest') return b.modified.localeCompare(a.modified);
+      if (state.filesSort === 'modified-oldest') return a.modified.localeCompare(b.modified);
+      return state.filesSort === 'name-desc' ? b.name.localeCompare(a.name) : a.name.localeCompare(b.name);
+    });
+    const openPath = (path) => { state.path = path; state.filesSelectedPath = ''; showPageLoading('Files'); void renderTab(); };
+    const imageExt = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp']);
+    content.innerHTML = `<div class="files-browser"><div class="files-sticky-bar">
+      <button class="button" id="files-home">${icon('e0d7')} Drives</button>
+      <button class="button files-up-button" id="file-up" title="Parent folder">Up</button>
+      <form id="path-form"><input id="file-path" class="input mono" value="${escapeHtml(state.path)}" aria-label="Current folder path"><button class="button" title="Go to path">${icon('e0a6')}</button></form>
+      <div class="files-search-wrap"><button class="button files-search-toggle" id="files-search-toggle" title="Search files" aria-label="Search files">${icon('e151')}</button><label class="files-search" ${state.filesSearchOpen ? '' : 'hidden'}><input id="files-search" type="search" value="${escapeHtml(state.filesSearch)}" placeholder="Search files" aria-label="Search files"></label></div>
+      <div class="files-actions"><button class="button tonal" id="files-import" ${state.filesExporting ? 'disabled' : ''}>${icon('e0cc')} Import</button><button class="button tonal" id="files-export" ${selected && !state.filesExporting ? '' : 'disabled'}>${icon('e0cc')} Export</button><div class="files-menu-wrap"><button class="button files-menu-trigger" id="files-menu-trigger" title="View options" aria-label="View options">${icon('e0b7')}</button>
+        <div class="files-options" id="files-options" hidden><div class="files-options-row"><span>Icon size</span><button data-size="-">−</button><button data-size="+">+</button></div><label>Sort<select id="files-sort"><option value="name-asc">A–Z</option><option value="name-desc">Z–A</option><option value="modified-newest">Last Modified</option><option value="modified-oldest">First Modified</option><option value="size">Size</option><option value="type">Type</option></select></label><label class="files-hidden-toggle"><input id="files-hidden" type="checkbox" ${state.filesShowHidden ? 'checked' : ''}> Show Hidden Files</label></div></div></div></div>
+      <div class="files-grid" style="--file-icon-size:${state.filesIconSize}px">${visibleRows.length ? visibleRows.map((file) => { const path = `${normalizedPath}/${file.name}`, isImage = !file.directory && imageExt.has(extension(file.name)) && file.bytes <= 24 * 1024 * 1024; return `<button class="files-entry ${state.filesSelectedPath === path ? 'selected' : ''}" data-file-path="${escapeHtml(path)}" data-directory="${file.directory}"><span class="files-entry-icon ${file.directory ? 'folder' : 'file'}">${file.directory ? icon('e0d7') : isImage ? `<img data-file-thumb="${escapeHtml(path)}" alt="">` : icon('e0cc')}</span><span class="files-entry-name" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span></button>`; }).join('') : `<div class="files-empty">${empty(state.filesSearch ? 'No matching files' : 'Folder is empty', state.filesSearch ? 'Try another search.' : 'Choose another folder or import a file.')}</div>`}</div>
+      ${state.filesExporting ? `<div class="files-transfer"><span>${icon('e0cc')} Exporting ${escapeHtml(state.filesExporting)}</span><i><em></em></i></div>` : ''}</div>`;
+    $('#files-sort').value = state.filesSort;
+    $('#files-home').onclick = () => { state.filesView = 'drives'; state.filesSelectedPath = ''; renderStorage(); };
+    $('#file-up').onclick = () => {
+      if (state.path === state.storageRootPath) { state.filesView = 'drives'; renderStorage(); return; }
+      const parent = state.path.replace(/\/$/, '').split('/').slice(0, -1).join('/') || '/';
+      openPath(parent);
+    };
+    $('#path-form').onsubmit = (event) => { event.preventDefault(); openPath($('#file-path').value.trim() || state.storageRootPath); };
+    $('#files-search-toggle').onclick = () => { state.filesSearchOpen = !state.filesSearchOpen; renderStorage(); if (state.filesSearchOpen) $('#files-search').focus(); };
+    $('#files-search')?.addEventListener('input', (event) => {
+      state.filesSearch = event.target.value;
+      const query = state.filesSearch.toLowerCase();
+      document.querySelectorAll('[data-file-path]').forEach((entry) => { entry.hidden = !entry.querySelector('.files-entry-name').textContent.toLowerCase().includes(query); });
+    });
+    $('#files-menu-trigger').onclick = () => { $('#files-options').hidden = !$('#files-options').hidden; };
+    $('#files-sort').onchange = (event) => { state.filesSort = event.target.value; renderStorage(); $('#files-options').hidden = false; };
+    $('#files-hidden').onchange = (event) => { state.filesShowHidden = event.target.checked; renderStorage(); $('#files-options').hidden = false; };
+    document.querySelectorAll('[data-size]').forEach((button) => button.onclick = () => {
+      state.filesIconSize = Math.max(56, Math.min(160, state.filesIconSize + (button.dataset.size === '+' ? 16 : -16)));
+      renderStorage(); $('#files-options').hidden = false;
+    });
+    const showFile = async (path) => {
+      const file = byPath.get(path);
+      if (file?.directory) { openPath(path); return; }
+      try {
+        const image = await invokeOrFail('adb_photo_preview', { serial: state.serial, path });
+        const preview = document.createElement('div');
+        preview.className = 'files-preview';
+        preview.innerHTML = `<button class="button files-preview-close" aria-label="Close">Close</button><img src="${image}" alt="${escapeHtml(file?.name || path)}">`;
+        preview.onclick = (event) => { if (event.target === preview || event.target.closest('.files-preview-close')) preview.remove(); };
+        document.body.append(preview);
+      } catch { toast('Preview is available for image files. Use Export for other file types.', true); }
+    };
+    const refreshFiles = async () => {
+      state.data = await invokeOrFail('adb_data', { serial: state.serial, section: 'files', path: state.path });
+      renderStorage();
+    };
+    const runFileAction = async (fileAction, source, destination = '') => {
+      await action(fileAction, source, destination);
+      await refreshFiles();
+    };
+    document.querySelectorAll('[data-file-path]').forEach((button) => {
+      button.onclick = () => { state.filesSelectedPath = button.dataset.filePath; renderStorage(); };
+      button.ondblclick = () => void showFile(button.dataset.filePath);
+      button.oncontextmenu = (event) => {
+        event.preventDefault();
+        const path = button.dataset.filePath, file = byPath.get(path), isDirectory = button.dataset.directory === 'true';
+        document.querySelector('.files-context-menu')?.remove();
+        const menu = document.createElement('div');
+        menu.className = 'files-context-menu';
+        menu.style.left = `${Math.max(4, Math.min(event.clientX, innerWidth - 200))}px`;
+        menu.style.top = `${Math.max(4, Math.min(event.clientY, innerHeight - 310))}px`;
+        menu.innerHTML = `<button data-file-command="open">Open</button><button data-file-command="copy">Copy</button><button data-file-command="cut">Cut</button><button data-file-command="paste" ${state.filesClipboard ? '' : 'disabled'}>Paste</button><button data-file-command="rename">Rename</button><button data-file-command="delete" class="danger">Delete</button><button data-file-command="export">Export</button>`;
+        document.body.append(menu);
+        const close = (outside) => { if (!menu.contains(outside.target)) { menu.remove(); window.removeEventListener('pointerdown', close); } };
+        window.addEventListener('pointerdown', close);
+        menu.onclick = async (click) => {
+          try {
+          click.stopPropagation();
+          const command = click.target.closest('[data-file-command]')?.dataset.fileCommand;
+          if (!command || click.target.closest('button').disabled) return;
+          menu.remove(); window.removeEventListener('pointerdown', close);
+          state.filesSelectedPath = path;
+          if (command === 'open') { await showFile(path); return; }
+          if (command === 'copy' || command === 'cut') { state.filesClipboard = { path, cut: command === 'cut' }; renderStorage(); toast(command === 'copy' ? 'Ready to copy' : 'Ready to move'); return; }
+          if (command === 'delete') {
+            if (confirm(`Delete ${file.name} from the device?`)) await runFileAction('delete_file', path);
+            return;
+          }
+          if (command === 'rename') {
+            const name = prompt('Rename to:', file.name)?.trim();
+            if (name && name !== file.name && !/[\\/]/.test(name) && !['.', '..'].includes(name)) await runFileAction('move_file', path, `${normalizedPath}/${name}`);
+            return;
+          }
+          if (command === 'paste' && state.filesClipboard) {
