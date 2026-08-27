@@ -574,3 +574,147 @@
                 ${state.photosLightboxIndex < filtered.length - 1 ? `
                   <button class="lightbox-nav-btn next" id="lightbox-next-btn" title="Next photo (→)">›</button>
                 ` : ''}
+              </div>
+
+              <div class="lightbox-footer">
+                <span>Press ← / → to navigate, Esc to close</span>
+              </div>
+            </div>
+          `;
+        })() : ''}
+      </div>
+    `;
+
+    // 1. Search input
+    const searchInput = $('#photos-search-input');
+    if (searchInput) {
+      searchInput.oninput = (e) => {
+        state.photosSearch = e.target.value;
+        renderPhotos();
+        const fresh = $('#photos-search-input');
+        if (fresh) { fresh.focus(); fresh.setSelectionRange(fresh.value.length, fresh.value.length); }
+      };
+    }
+
+    // 2. Album pills
+    document.querySelectorAll('[data-album]').forEach(btn => {
+      btn.onclick = () => {
+        state.photosAlbum = btn.dataset.album;
+        renderPhotos();
+      };
+    });
+
+    // 3. Density toggle
+    document.querySelectorAll('[data-density]').forEach(btn => {
+      btn.onclick = () => {
+        state.photosDensity = btn.dataset.density;
+        renderPhotos();
+      };
+    });
+
+    const loadMorePhotos = async () => {
+      if (state.tab !== 'photos' || !state.photosHasMore || state.photosPageLoading) return;
+      const scrollTop = content.scrollTop;
+      await loadPhotoPage();
+      if (state.tab !== 'photos') return;
+      renderPhotos();
+      content.scrollTop = scrollTop;
+    };
+    state.photosObserver?.disconnect();
+    if (state.photosHasMore && 'IntersectionObserver' in window) {
+      state.photosObserver = new IntersectionObserver((entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) loadMorePhotos();
+      }, { root: content, rootMargin: '240px' });
+      state.photosObserver.observe($('#photos-load-more'));
+    } else if (state.photosHasMore) {
+      content.onscroll = () => {
+        if (content.scrollTop + content.clientHeight >= content.scrollHeight - 240) loadMorePhotos();
+      };
+    } else {
+      content.onscroll = null;
+    }
+
+    // 4. Push / Upload photo
+    const uploadBtn = $('#photo-upload-btn');
+    if (uploadBtn) {
+      uploadBtn.onclick = async () => {
+        try {
+          const filePath = await action('pick_file', 'jpg,jpeg,png,webp');
+          if (filePath) {
+            toast('Pushing photo to /sdcard/DCIM/Camera/...');
+            await action('push_photo', filePath);
+            toast('Photo pushed and scanned into gallery!');
+            await loadPhotoPage(true);
+            renderPhotos();
+          }
+        } catch (err) {
+          if (!String(err).includes('cancelled')) toast(String(err), true);
+        }
+      };
+    }
+
+    // 5. Lightbox open
+    document.querySelectorAll('[data-photo-view]').forEach(el => {
+      el.onclick = async (e) => {
+        e.stopPropagation();
+        const idx = Number(el.dataset.photoView);
+        state.photosLightboxIndex = idx;
+        renderPhotos();
+        const targetPhoto = filtered[idx];
+        if (targetPhoto && !state.photosCache[targetPhoto.path]) {
+          try {
+            const src = await invokeOrFail('adb_photo_preview', { serial: state.serial, path: targetPhoto.path });
+            state.photosCache[targetPhoto.path] = src;
+            const container = $('#lightbox-img-container');
+            if (container && state.photosLightboxIndex === idx) {
+              container.innerHTML = `<img src="${src}" alt="${escapeHtml(targetPhoto.name)}">`;
+            }
+          } catch (err) {
+            toast('Failed to load image preview: ' + err, true);
+          }
+        }
+      };
+    });
+
+    document.querySelectorAll('.photo-card').forEach((card) => card.addEventListener('contextmenu', (event) => {
+      event.preventDefault();
+      const index = Number(card.querySelector('[data-photo-view]')?.dataset.photoView);
+      const photo = filtered[index];
+      if (!photo) return;
+      document.querySelector('.photo-context-menu')?.remove();
+      const menu = document.createElement('div');
+      menu.className = 'photo-context-menu';
+      menu.style.left = `${Math.min(event.clientX, window.innerWidth - 170)}px`;
+      menu.style.top = `${Math.min(event.clientY, window.innerHeight - 150)}px`;
+      menu.innerHTML = '<button data-photo-menu="open">Open</button><button data-photo-menu="save">Save to PC</button><button data-photo-menu="delete" class="danger">Delete</button>';
+      document.body.append(menu);
+      const close = (outsideEvent) => {
+        if (!menu.contains(outsideEvent.target)) { menu.remove(); window.removeEventListener('pointerdown', close); }
+      };
+      window.addEventListener('pointerdown', close);
+      menu.onclick = async (click) => {
+        const choice = click.target.closest('[data-photo-menu]')?.dataset.photoMenu;
+        menu.remove(); window.removeEventListener('pointerdown', close);
+        if (choice === 'open') document.querySelector(`[data-photo-view="${index}"]`)?.click();
+        if (choice === 'save') await action('download_photo', photo.path);
+        if (choice === 'delete' && confirm(`Delete ${photo.name} from the device?`)) {
+          await action('delete_photo', photo.path);
+          delete state.photosCache[photo.path];
+          state.photosSelected.delete(photo.path);
+          await loadPhotoPage(true);
+          renderPhotos();
+        }
+      };
+    }));
+
+    // 6. Selection checkbox
+    document.querySelectorAll('[data-photo-select]').forEach(box => {
+      box.onclick = (e) => {
+        e.stopPropagation();
+        const path = box.dataset.photoSelect;
+        if (state.photosSelected.has(path)) {
+          state.photosSelected.delete(path);
+        } else {
+          state.photosSelected.add(path);
+        }
+        renderPhotos();
