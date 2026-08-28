@@ -1582,3 +1582,147 @@
     }
 
     const bugreportBtn = $('#gen-bugreport-btn');
+    if (bugreportBtn) {
+      bugreportBtn.onclick = async () => {
+        toast('Generating comprehensive bugreport (this may take 20-30 seconds)...');
+        try {
+          const res = await action('bugreport');
+          toast(res || 'Bugreport saved to Downloads folder!');
+        } catch (err) { toast(String(err), true); }
+      };
+    }
+
+    const fullBackupBtn = $('#full-backup-btn');
+    if (fullBackupBtn) {
+      fullBackupBtn.onclick = async () => {
+        try {
+          const res = await action('backup_full');
+          toast(res || 'Backup started - check phone display!');
+        } catch (err) { toast(String(err), true); }
+      };
+    }
+
+    const backupAppBtn = $('#backup-app-btn');
+    if (backupAppBtn) {
+      backupAppBtn.onclick = async () => {
+        const pkg = $('#backup-app-pkg').value.trim();
+        if (!pkg) { toast('Enter a package name (e.g. com.example.app)', true); return; }
+        try {
+          const res = await action('backup_app', pkg);
+          toast(res || 'App backup started!');
+        } catch (err) { toast(String(err), true); }
+      };
+    }
+
+    document.querySelectorAll('[data-part-preset]').forEach(btn => {
+      btn.onclick = () => {
+        const input = $('#dump-partition-name');
+        if (input) { input.value = btn.dataset.partPreset; input.focus(); }
+      };
+    });
+
+    const dumpPartBtn = $('#dump-partition-btn');
+    if (dumpPartBtn) {
+      dumpPartBtn.onclick = async () => {
+        const part = $('#dump-partition-name').value.trim();
+        if (!part) { toast('Enter or select a partition name to dump', true); return; }
+        toast(`Dumping /dev/block/by-name/${part} to PC Downloads...`);
+        try {
+          const res = await action('dump_partition', part);
+          toast(res || `Partition ${part} dumped successfully!`);
+        } catch (err) { toast(String(err), true); }
+      };
+    }
+
+    const browseRestoreBtn = $('#browse-restore-ab-btn');
+    if (browseRestoreBtn) {
+      browseRestoreBtn.onclick = async () => {
+        try {
+          const p = await action('pick_file', 'ab');
+          if (p) $('#restore-ab-path').value = p;
+        } catch {}
+      };
+    }
+
+    const executeRestoreBtn = $('#execute-restore-btn');
+    if (executeRestoreBtn) {
+      executeRestoreBtn.onclick = async () => {
+        const p = $('#restore-ab-path').value.trim();
+        if (!p) { toast('Browse and select an .ab backup file first', true); return; }
+        if (confirm(`Restore backup archive:\n${p}\n\nConfirm prompt on phone screen when prompted.`)) {
+          try {
+            const res = await action('restore_backup', p);
+            toast(res || 'Restore command sent!');
+          } catch (err) { toast(String(err), true); }
+        }
+      };
+    }
+
+    document.querySelectorAll('[data-dpi-val]').forEach(btn => {
+      btn.onclick = () => {
+        const input = $('#custom-dpi-input');
+        if (input) input.value = btn.dataset.dpiVal;
+      };
+    });
+
+    const applyDpiBtn = $('#apply-dpi-btn');
+    if (applyDpiBtn) {
+      applyDpiBtn.onclick = async () => {
+        const val = $('#custom-dpi-input').value.trim();
+        if (!val) return;
+        state.customDensityVal = val;
+        try {
+          await action('set_density', val);
+          toast(`Display density set to ${val} DPI`);
+        } catch (err) { toast(String(err), true); }
+      };
+    }
+
+    const resetDpiBtn = $('#reset-dpi-btn');
+    if (resetDpiBtn) {
+      resetDpiBtn.onclick = async () => {
+        try {
+          await action('set_density', 'reset');
+          toast('Display density reset to default stock value');
+        } catch (err) { toast(String(err), true); }
+      };
+    }
+
+    document.querySelectorAll('[data-anim-val]').forEach(btn => {
+      btn.onclick = async () => {
+        const scale = btn.dataset.animVal;
+        state.customAnimScale = scale;
+        try {
+          await action('set_animations', scale);
+          toast(`Animation scales set to ${scale}x`);
+          renderFirmware();
+        } catch (err) { toast(String(err), true); }
+      };
+    });
+
+    const applyFastAnimBtn = $('#apply-fast-anim-btn');
+    if (applyFastAnimBtn) {
+      applyFastAnimBtn.onclick = async () => {
+        state.customAnimScale = '0.5';
+        try {
+          await action('set_animations', '0.5');
+          toast('Applied 0.5x snappy animation scales');
+          renderFirmware();
+        } catch (err) { toast(String(err), true); }
+      };
+    }
+
+    document.querySelectorAll('[data-res-val]').forEach(btn => {
+      btn.onclick = () => {
+        const input = $('#custom-res-input');
+        if (input) input.value = btn.dataset.resVal;
+      };
+    });
+
+    const applyResBtn = $('#apply-res-btn');
+    if (applyResBtn) {
+      applyResBtn.onclick = async () => {
+        const v = $('#custom-res-input').value.trim();
+        if (!v) return;
+        try {
+          if (v === 'reset') {
