@@ -1294,3 +1294,147 @@
             <p class="tool-panel-desc">Produces a complete system state dump including kernel log ring buffer, tombstone crashes, ANR logs, package metadata, and dumpsys telemetry saved to your PC <code>~/Downloads/</code> directory.</p>
           </div>
         </div>
+      `;
+    } else if (subtab === 'backup') {
+      subtabHtml = `
+        <div class="tool-grid">
+          <div class="tool-panel">
+            <div class="tool-panel-head">
+              <span class="tool-panel-title">${icon("e0d7")} Full Device Backup (.ab)</span>
+            </div>
+            <p class="tool-panel-desc">Creates an Android backup archive (including installed APKs, shared media, and app configurations). The file will be placed in your PC Downloads folder.</p>
+            <div class="notice" style="font-size:12px;">You will need to unlock your phone and tap "Back up my data" on the screen prompt to authorize the backup.</div>
+            <button class="button primary" id="full-backup-btn" style="margin-top:4px;">${icon("e0cc")} Initiate Full Backup</button>
+          </div>
+
+          <div class="tool-panel">
+            <div class="tool-panel-head">
+              <span class="tool-panel-title">${icon("e14f")} Single Application Backup</span>
+            </div>
+            <p class="tool-panel-desc">Export a single application's APK and data to an encrypted or plain <code>.ab</code> file.</p>
+            <div class="tool-action-row">
+              <input id="backup-app-pkg" class="input mono" placeholder="Package name (e.g. com.whatsapp)">
+              <button class="button tonal" id="backup-app-btn">Backup App</button>
+            </div>
+          </div>
+
+          <div class="tool-panel">
+            <div class="tool-panel-head">
+              <span class="tool-panel-title">${icon("e048")} Live Partition Dumper (Root)</span>
+            </div>
+            <p class="tool-panel-desc">Extract raw flash block devices directly from <code>/dev/block/by-name/</code> into a pristine <code>.img</code> file on your computer.</p>
+            <div class="preset-pills" style="margin-bottom:6px;">
+              <span style="font-size:11px; color:#64748b; align-self:center;">Presets:</span>
+              <button class="preset-pill" data-part-preset="boot">boot</button>
+              <button class="preset-pill" data-part-preset="init_boot">init_boot</button>
+              <button class="preset-pill" data-part-preset="recovery">recovery</button>
+              <button class="preset-pill" data-part-preset="vbmeta">vbmeta</button>
+              <button class="preset-pill" data-part-preset="vendor_boot">vendor_boot</button>
+            </div>
+            <div class="tool-action-row">
+              <input id="dump-partition-name" class="input mono" placeholder="Partition name (e.g. boot)">
+              <button class="button warning" id="dump-partition-btn">Dump to PC</button>
+            </div>
+          </div>
+
+          <div class="tool-panel">
+            <div class="tool-panel-head">
+              <span class="tool-panel-title">${icon("e145")} Restore Android Backup</span>
+            </div>
+            <p class="tool-panel-desc">Restore an existing <code>.ab</code> archive back onto the connected Android device.</p>
+            <div class="tool-action-row">
+              <input id="restore-ab-path" class="input mono" placeholder="Select backup file (.ab)..." readonly>
+              <button class="button tonal" id="browse-restore-ab-btn">Browse .ab</button>
+            </div>
+            <button class="button success" id="execute-restore-btn" style="margin-top:4px;">${icon("e145")} Restore to Device</button>
+          </div>
+        </div>
+      `;
+    } else if (subtab === 'tweaks') {
+      subtabHtml = `
+        <div class="tool-grid">
+          <div class="tool-panel">
+            <div class="tool-panel-head">
+              <span class="tool-panel-title">${icon("e14f")} Display Density (DPI)</span>
+              <span class="chip mono">Current: ${escapeHtml(t.screen_dpi || 'Stock')}</span>
+            </div>
+            <p class="tool-panel-desc">Adjust UI scaling and density live via WindowManager without requiring a reboot.</p>
+            <div class="preset-pills" style="margin-bottom:6px;">
+              <span style="font-size:11px; color:#64748b; align-self:center;">Presets:</span>
+              <button class="preset-pill" data-dpi-val="320">320 (Compact)</button>
+              <button class="preset-pill" data-dpi-val="360">360 (Small)</button>
+              <button class="preset-pill" data-dpi-val="400">400 (Default)</button>
+              <button class="preset-pill" data-dpi-val="440">440 (Large)</button>
+              <button class="preset-pill" data-dpi-val="560">560 (Tablet)</button>
+            </div>
+            <div class="tool-action-row">
+              <input id="custom-dpi-input" class="input mono" placeholder="Enter DPI (e.g. 380)" value="${escapeHtml(state.customDensityVal)}">
+              <button class="button primary" id="apply-dpi-btn">Apply DPI</button>
+              <button class="button tonal" id="reset-dpi-btn">Reset</button>
+            </div>
+          </div>
+
+          <div class="tool-panel">
+            <div class="tool-panel-head">
+              <span class="tool-panel-title">${icon("e145")} Snappy Animation Scales</span>
+            </div>
+            <p class="tool-panel-desc">Speed up window animations, transitions, and animator durations across the entire system UI.</p>
+            <div class="preset-pills" style="margin-bottom:10px;">
+              <button class="preset-pill ${state.customAnimScale === '0.25' ? 'active' : ''}" data-anim-val="0.25">0.25x (Lightning)</button>
+              <button class="preset-pill ${state.customAnimScale === '0.5' ? 'active' : ''}" data-anim-val="0.5">0.5x (Snappy)</button>
+              <button class="preset-pill ${state.customAnimScale === '1.0' ? 'active' : ''}" data-anim-val="1.0">1.0x (Stock)</button>
+              <button class="preset-pill ${state.customAnimScale === '0.0' ? 'active' : ''}" data-anim-val="0.0">0.0x (Instant / Off)</button>
+            </div>
+            <button class="button tonal" id="apply-fast-anim-btn">${icon("e145")} Set 0.5x Snappy Speed</button>
+          </div>
+
+          <div class="tool-panel" style="grid-column: 1 / -1;">
+            <div class="tool-panel-head">
+              <span class="tool-panel-title">${icon("e0cc")} Screen Resolution (WindowManager)</span>
+              <span class="chip mono">Native: ${escapeHtml(t.screen_res || 'Default')}</span>
+            </div>
+            <p class="tool-panel-desc">Force custom render resolutions for gaming, battery optimization, or performance testing.</p>
+            <div class="preset-pills" style="margin-bottom:8px;">
+              <button class="preset-pill" data-res-val="1080x2400">1080x2400 (FHD+)</button>
+              <button class="preset-pill" data-res-val="1440x3200">1440x3200 (QHD+)</button>
+              <button class="preset-pill" data-res-val="720x1600">720x1600 (HD+ 720p)</button>
+              <button class="preset-pill" data-res-val="reset">Reset Native</button>
+            </div>
+            <div class="tool-action-row" style="max-width:480px;">
+              <input id="custom-res-input" class="input mono" placeholder="1080x2400 or reset">
+              <button class="button primary" id="apply-res-btn">Set Resolution</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    content.innerHTML = `
+      <div class="custom-suite">
+        <nav class="custom-subnav">
+          <button class="custom-subtab-btn ${subtab === 'boot' ? 'active' : ''}" data-custom-tab="boot">${icon("e145")} Power & Boot Modes</button>
+          <button class="custom-subtab-btn ${subtab === 'root' ? 'active' : ''}" data-custom-tab="root">${icon("e048")} Root & Superuser</button>
+          <button class="custom-subtab-btn ${subtab === 'firmware' ? 'active' : ''}" data-custom-tab="firmware">${icon("e0cc")} Firmware & Fastboot</button>
+          <button class="custom-subtab-btn ${subtab === 'backup' ? 'active' : ''}" data-custom-tab="backup">${icon("e0d7")} Backup & Restore</button>
+          <button class="custom-subtab-btn ${subtab === 'tweaks' ? 'active' : ''}" data-custom-tab="tweaks">${icon("e14f")} System Tweaks</button>
+        </nav>
+        ${subtabHtml}
+      </div>
+    `;
+
+    document.querySelectorAll('[data-custom-tab]').forEach(btn => {
+      btn.onclick = () => {
+        state.customSubtab = btn.dataset.customTab;
+        renderFirmware();
+      };
+    });
+
+    document.querySelectorAll('[data-reboot-target]').forEach(btn => {
+      btn.onclick = async () => {
+        const target = btn.dataset.rebootTarget;
+        if (confirm(`Reboot device into ${target.toUpperCase()} mode? The device may briefly disconnect.`)) {
+          await action('reboot', target);
+        }
+      };
+    });
+
