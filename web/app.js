@@ -1438,3 +1438,147 @@
       };
     });
 
+    const powerOffBtn = $('#power-off-btn');
+    if (powerOffBtn) {
+      powerOffBtn.onclick = async () => {
+        if (confirm('Power off the Android device hardware?')) {
+          await action('shell', 'reboot -p');
+          toast('Power off command sent.');
+        }
+      };
+    }
+
+    const runRootCheckBtn = $('#run-root-check-btn');
+    if (runRootCheckBtn) {
+      runRootCheckBtn.onclick = async () => {
+        toast('Checking root status and superuser binaries...');
+        try {
+          const res = await action('root_check');
+          state.customRootStatus = res;
+          renderFirmware();
+        } catch (err) {
+          toast(String(err), true);
+        }
+      };
+    }
+
+    const selinuxPermBtn = $('#selinux-permissive-btn');
+    if (selinuxPermBtn) {
+      selinuxPermBtn.onclick = async () => {
+        try {
+          await action('set_selinux', '0');
+          const chip = $('#selinux-live-chip');
+          if (chip) chip.textContent = 'Permissive';
+        } catch (e) { toast(String(e), true); }
+      };
+    }
+
+    const selinuxEnfBtn = $('#selinux-enforcing-btn');
+    if (selinuxEnfBtn) {
+      selinuxEnfBtn.onclick = async () => {
+        try {
+          await action('set_selinux', '1');
+          const chip = $('#selinux-live-chip');
+          if (chip) chip.textContent = 'Enforcing';
+        } catch (e) { toast(String(e), true); }
+      };
+    }
+
+    const remountBtn = $('#remount-system-btn');
+    if (remountBtn) {
+      remountBtn.onclick = async () => {
+        try {
+          const res = await action('remount_system');
+          toast(res || 'Remount command completed');
+        } catch (e) { toast(String(e), true); }
+      };
+    }
+
+    document.querySelectorAll('[data-su-preset]').forEach(btn => {
+      btn.onclick = () => {
+        const input = $('#su-shell-input');
+        if (input) { input.value = btn.dataset.suPreset; input.focus(); }
+      };
+    });
+
+    const suForm = $('#su-shell-form');
+    if (suForm) {
+      suForm.onsubmit = async (e) => {
+        e.preventDefault();
+        const cmd = $('#su-shell-input').value.trim();
+        if (!cmd) return;
+        const out = $('#su-shell-output');
+        out.textContent = `# su -c "${cmd}"\nExecuting with UID 0...`;
+        try {
+          const res = await action('shell', `su -c "${cmd}"`);
+          out.textContent = `# su -c "${cmd}"\n${res || '(no output / completed)'}`;
+        } catch (err) {
+          out.textContent = `# su -c "${cmd}"\nError: ${err}`;
+        }
+      };
+    }
+
+    const scanFastbootBtn = $('#scan-fastboot-btn');
+    if (scanFastbootBtn) {
+      scanFastbootBtn.onclick = async () => {
+        try {
+          const res = await action('fastboot_devices');
+          state.customFastbootDevices = res;
+          const box = $('#fastboot-scan-result');
+          if (box) box.textContent = res;
+        } catch (err) { toast(String(err), true); }
+      };
+    }
+
+    const browseOtaBtn = $('#browse-ota-btn');
+    if (browseOtaBtn) {
+      browseOtaBtn.onclick = async () => {
+        try {
+          const p = await action('pick_file', 'zip');
+          if (p) $('#ota-file-path').value = p;
+        } catch {}
+      };
+    }
+
+    const flashOtaBtn = $('#flash-ota-btn');
+    if (flashOtaBtn) {
+      flashOtaBtn.onclick = async () => {
+        const p = $('#ota-file-path').value.trim();
+        if (!p) { toast('Please browse and select an OTA .zip file first.', true); return; }
+        if (confirm(`Begin ADB sideload of:\n${p}\n\nEnsure device is in Recovery Sideload mode!`)) {
+          toast('Starting OTA sideload, please wait...');
+          try {
+            const res = await action('sideload_ota', p);
+            toast(res || 'OTA Sideload complete!');
+          } catch (err) { toast(String(err), true); }
+        }
+      };
+    }
+
+    const browseFastbootImgBtn = $('#browse-fastboot-img-btn');
+    if (browseFastbootImgBtn) {
+      browseFastbootImgBtn.onclick = async () => {
+        try {
+          const p = await action('pick_file', 'img');
+          if (p) $('#fastboot-img-path').value = p;
+        } catch {}
+      };
+    }
+
+    const flashFastbootBtn = $('#flash-fastboot-btn');
+    if (flashFastbootBtn) {
+      flashFastbootBtn.onclick = async () => {
+        const part = $('#fastboot-partition-select').value;
+        const img = $('#fastboot-img-path').value.trim();
+        if (!img) { toast('Please select an image file (.img) to flash.', true); return; }
+        if (confirm(`Flash image:\n${img}\n\nTo partition [${part}] in fastboot mode?`)) {
+          toast(`Flashing ${part}...`);
+          try {
+            const res = await action('fastboot_flash', part, img);
+            toast(res || `Fastboot flash to ${part} finished!`);
+          } catch (err) { toast(String(err), true); }
+        }
+      };
+    }
+
+    const bugreportBtn = $('#gen-bugreport-btn');
