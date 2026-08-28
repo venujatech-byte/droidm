@@ -1150,3 +1150,147 @@
           <div class="boot-mode-card">
             <div class="boot-mode-top">
               <span class="icon" style="color:#fca5a5; font-size:18px;">&#xe14c;</span>
+              <span class="boot-mode-title">Power Off / Shutdown</span>
+            </div>
+            <p class="boot-mode-desc">Cleanly power down the Android device hardware without initiating a reboot sequence.</p>
+            <button class="boot-mode-btn poweroff" id="power-off-btn">${icon("e14c")} Power Off Device</button>
+          </div>
+        </div>
+
+        <section class="card" style="margin-top:16px;">
+          <div class="card-head">
+            <div>
+              <h3>Hardware & Navigation Emulation</h3>
+              <span class="subtle">Inject hardware button events over the ADB bridge</span>
+            </div>
+          </div>
+          <div class="toolbar" style="margin-top:10px;">
+            <button class="button" data-action="key_power">${icon("e14c")} Power / Wake</button>
+            <button class="button" data-action="key_volume_up">${icon("e145")} Vol +</button>
+            <button class="button" data-action="key_volume_down">${icon("e145")} Vol −</button>
+            <button class="button tonal" data-action="key_home">${icon("e101")} Home</button>
+            <button class="button tonal" data-action="key_back">${icon("e048")} Back</button>
+            <button class="button tonal" data-action="key_recents">${icon("e14f")} Recents</button>
+          </div>
+        </section>
+      `;
+    } else if (subtab === 'root') {
+      const rootStatus = state.customRootStatus;
+      const isRooted = rootStatus ? rootStatus.includes('ROOTED') : t.is_rooted;
+
+      subtabHtml = `
+        <div class="root-banner">
+          <div>
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span class="root-status-pill ${isRooted ? 'rooted' : 'unrooted'}">
+                ● ${isRooted ? 'DEVICE ROOTED (UID 0)' : 'STOCK / UNROOTED'}
+              </span>
+              <span class="chip mono">SELinux: ${escapeHtml(t.selinux || 'Enforcing')}</span>
+            </div>
+            <div style="margin-top:6px; color:#cbd5e1; font-size:13px;">
+              ${rootStatus ? escapeHtml(rootStatus) : 'Click "Run Root Verification" to detect active su binary, Magisk, KernelSU, or APatch modules.'}
+            </div>
+          </div>
+          <button class="button primary" id="run-root-check-btn">${icon("e145")} Run Root Verification</button>
+        </div>
+
+        <div class="tool-grid" style="margin-top:16px;">
+          <div class="tool-panel">
+            <div class="tool-panel-head">
+              <span class="tool-panel-title">${icon("e048")} SELinux Runtime State</span>
+              <span class="chip mono" id="selinux-live-chip">${escapeHtml(t.selinux || 'Enforcing')}</span>
+            </div>
+            <p class="tool-panel-desc">Switch SELinux enforcement without restarting. Permissive mode logs AVC denials without blocking root operations or system modifications.</p>
+            <div class="tool-action-row">
+              <button class="button tonal" id="selinux-permissive-btn">Set Permissive (0)</button>
+              <button class="button" id="selinux-enforcing-btn">Set Enforcing (1)</button>
+            </div>
+          </div>
+
+          <div class="tool-panel">
+            <div class="tool-panel-head">
+              <span class="tool-panel-title">${icon("e0d7")} Partition Remount (RW)</span>
+            </div>
+            <p class="tool-panel-desc">Remount Android <code>/system</code>, <code>/vendor</code>, and <code>/product</code> partitions as Read-Write to allow replacing system files, fonts, or boot animations.</p>
+            <div class="tool-action-row">
+              <button class="button warning" id="remount-system-btn">${icon("e0cc")} Remount /system as RW</button>
+            </div>
+          </div>
+
+          <div class="tool-panel" style="grid-column: 1 / -1;">
+            <div class="tool-panel-head">
+              <span class="tool-panel-title">${icon("e14f")} Superuser Root Shell (su -c)</span>
+              <span class="subtle mono">uid=0(root) gid=0(root)</span>
+            </div>
+            <p class="tool-panel-desc">Execute privileged commands with superuser credentials. Output is captured below.</p>
+            <div class="preset-pills" style="margin-bottom:8px;">
+              <span style="font-size:11px; color:#64748b; align-self:center;">Quick Commands:</span>
+              <button class="preset-pill" data-su-preset="id">id</button>
+              <button class="preset-pill" data-su-preset="magisk -v">magisk -v</button>
+              <button class="preset-pill" data-su-preset="ls -la /data/adb">ls -la /data/adb</button>
+              <button class="preset-pill" data-su-preset="mount | grep system">grep system mount</button>
+              <button class="preset-pill" data-su-preset="dmesg | tail -n 25">kernel dmesg</button>
+            </div>
+            <form id="su-shell-form" class="tool-action-row">
+              <input id="su-shell-input" class="input mono" placeholder="su -c id" autocomplete="off">
+              <button class="button primary">Run Root Command</button>
+            </form>
+            <pre id="su-shell-output" class="console" style="min-height:160px; margin-top:8px;">Ready for root shell execution.</pre>
+          </div>
+        </div>
+      `;
+    } else if (subtab === 'firmware') {
+      subtabHtml = `
+        <div class="tool-grid">
+          <div class="tool-panel" style="grid-column: 1 / -1;">
+            <div class="tool-panel-head">
+              <span class="tool-panel-title">${icon("e0cc")} Fastboot Device Bus</span>
+              <button class="button tonal" id="scan-fastboot-btn">${icon("e145")} Scan Fastboot Devices</button>
+            </div>
+            <p class="tool-panel-desc">Check if any connected devices are running in Bootloader, Fastboot, or Fastbootd mode.</p>
+            <div id="fastboot-scan-result" class="mono" style="padding:10px 14px; background:var(--well); border-radius:8px; font-size:12px; color:#38bdf8;">
+              ${state.customFastbootDevices || 'Click "Scan Fastboot Devices" to query connected fastboot interfaces.'}
+            </div>
+          </div>
+
+          <div class="tool-panel">
+            <div class="tool-panel-head">
+              <span class="tool-panel-title">${icon("e0cc")} Sideload OTA Firmware</span>
+            </div>
+            <p class="tool-panel-desc">Flash official or custom OTA update zip archives onto the device via <code>adb sideload update.zip</code>. The device must be in Recovery Sideload mode.</p>
+            <div class="tool-action-row">
+              <input id="ota-file-path" class="input mono" placeholder="Path to update.zip..." readonly>
+              <button class="button tonal" id="browse-ota-btn">Browse .zip</button>
+            </div>
+            <button class="button primary" id="flash-ota-btn" style="margin-top:4px;">${icon("e145")} Begin OTA Sideload</button>
+          </div>
+
+          <div class="tool-panel">
+            <div class="tool-panel-head">
+              <span class="tool-panel-title">${icon("e14f")} Fastboot Partition Flasher</span>
+            </div>
+            <p class="tool-panel-desc">Flash kernel, ramdisk, recovery, or AVB meta partition images (<code>boot.img</code>, <code>recovery.img</code>, <code>vbmeta.img</code>) in fastboot mode.</p>
+            <div style="display:flex; gap:8px;">
+              <select id="fastboot-partition-select" class="input" style="width:140px;">
+                <option value="boot">boot</option>
+                <option value="init_boot">init_boot</option>
+                <option value="recovery">recovery</option>
+                <option value="vbmeta">vbmeta</option>
+                <option value="vendor_boot">vendor_boot</option>
+                <option value="dtbo">dtbo</option>
+                <option value="system">system</option>
+              </select>
+              <input id="fastboot-img-path" class="input mono" placeholder="Path to image (.img)..." readonly>
+              <button class="button tonal" id="browse-fastboot-img-btn">Browse</button>
+            </div>
+            <button class="button warning" id="flash-fastboot-btn" style="margin-top:4px;">${icon("e0cc")} Flash to Partition</button>
+          </div>
+
+          <div class="tool-panel" style="grid-column: 1 / -1;">
+            <div class="tool-panel-head">
+              <span class="tool-panel-title">${icon("e11b")} Diagnostic Bugreport Generator</span>
+              <button class="button success" id="gen-bugreport-btn">${icon("e0cc")} Generate Bugreport ZIP</button>
+            </div>
+            <p class="tool-panel-desc">Produces a complete system state dump including kernel log ring buffer, tombstone crashes, ANR logs, package metadata, and dumpsys telemetry saved to your PC <code>~/Downloads/</code> directory.</p>
+          </div>
+        </div>
