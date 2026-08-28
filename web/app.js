@@ -1726,3 +1726,147 @@
         if (!v) return;
         try {
           if (v === 'reset') {
+            await action('shell', 'wm size reset');
+            toast('Screen resolution reset to native');
+          } else {
+            await action('shell', `wm size ${v}`);
+            toast(`Screen resolution set to ${v}`);
+          }
+        } catch (err) { toast(String(err), true); }
+      };
+    }
+  }
+  function formatRate(value) {
+    if (value == null || !Number.isFinite(Number(value))) return '0 B/s';
+    const num = Number(value);
+    const units = ['B/s', 'KB/s', 'MB/s', 'GB/s'];
+    let n = Math.abs(num), i = 0;
+    while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+    const sign = num < 0 ? '-' : '';
+    return `${sign}${n.toFixed(i ? 1 : 0)} ${units[i]}`;
+  }
+
+  function formatBytes(value) {
+    if (value == null || !Number.isFinite(Number(value))) return '0 B';
+    const num = Number(value);
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let n = Math.abs(num), i = 0;
+    while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+    const sign = num < 0 ? '-' : '';
+    return `${sign}${n.toFixed(i ? 1 : 0)} ${units[i]}`;
+  }
+
+  function recordSensorSample(s) {
+    if (!s || typeof s !== 'object') return;
+    state.sensorHistorySerial = state.serial;
+    const previous = state.sensorHistory.at(-1), now = Date.now();
+    const sum = (items, key) => (items || []).reduce((n, item) => n + (Number(item[key]) || 0), 0);
+    const sumNetwork = (match, key) => sum((s.network_interfaces || []).filter((iface) => match.test(iface.name)), key);
+    const mem = s.mem_total_kb ? 100 * (s.mem_total_kb - (s.mem_available_kb || 0)) / s.mem_total_kb : null;
+    const diskTotal = s.storage_internal_total_kb, diskFree = s.storage_internal_free_kb;
+    const rx = sum(s.network_interfaces, 'rx_bytes'), tx = sum(s.network_interfaces, 'tx_bytes');
+    const wifiRx = sumNetwork(/^(wlan|wifi)/i, 'rx_bytes'), wifiTx = sumNetwork(/^(wlan|wifi)/i, 'tx_bytes');
+    const mobileRx = sumNetwork(/^(rmnet|ccmni|wwan|pdp)/i, 'rx_bytes'), mobileTx = sumNetwork(/^(rmnet|ccmni|wwan|pdp)/i, 'tx_bytes');
+    const diskRead = sum(s.disk_counters, 'read_sectors'), diskWrite = sum(s.disk_counters, 'written_sectors');
+    const seconds = previous ? Math.max(0.1, (now - previous.at) / 1000) : 0;
+    const rate = (current, old) => previous && current >= old && seconds > 0 ? (current - old) / seconds : 0;
+    const temps = s.temperatures || [];
+    const cores = {};
+    let procCpu = null;
+    for (const c of s.cpu_counters || []) {
+      if (c.name === 'cpu') {
+        const oldTotal = previous?.cpuCounters?.cpu?.total, oldIdle = previous?.cpuCounters?.cpu?.idle;
+        if (oldTotal != null && c.total > oldTotal && c.idle >= oldIdle) {
+          procCpu = Number((100 * (1 - (c.idle - oldIdle) / (c.total - oldTotal))).toFixed(1));
+        }
+        continue;
+      }
+      if (!previous) continue;
+      const old = (previous.cpuCounters || {})[c.name];
+      if (old && c.total > old.total && c.idle >= old.idle) {
+        cores[c.name] = Number((100 * (1 - (c.idle - old.idle) / (c.total - old.total))).toFixed(1));
+      }
+    }
+    const socketTotal = Number(s.socket_total) || 0;
+    const socketTcp = Number(s.socket_tcp) || 0;
+    const socketUdp = Number(s.socket_udp) || 0;
+    const rxRate = rate(rx, previous?.rx ?? rx);
+    const txRate = rate(tx, previous?.tx ?? tx);
+    const diskReadRate = rate(diskRead, previous?.diskRead ?? diskRead) * 512;
+    const diskWriteRate = rate(diskWrite, previous?.diskWrite ?? diskWrite) * 512;
+
+    state.sensorHistory.push({
+      at: now,
+      powerAttribution: s.power_attribution || [],
+      powerAttributionSecs: s.power_attribution_secs,
+      cpu: Number((s.cpu_usage_pct ?? procCpu ?? 0).toFixed(1)),
+      ram: Number((mem ?? 0).toFixed(1)),
+      swap: Number((s.swap_total_kb ? 100 * (s.swap_total_kb - (s.swap_free_kb || 0)) / s.swap_total_kb : 0).toFixed(1)),
+      storage: Number((diskTotal && diskFree != null ? 100 * (diskTotal - diskFree) / diskTotal : 0).toFixed(1)),
+      rx, tx,
+      wifiRx, wifiTx, mobileRx, mobileTx,
+      wifiRxRate: Number(rate(wifiRx, previous?.wifiRx ?? wifiRx).toFixed(1)), wifiTxRate: Number(rate(wifiTx, previous?.wifiTx ?? wifiTx).toFixed(1)),
+      mobileRxRate: Number(rate(mobileRx, previous?.mobileRx ?? mobileRx).toFixed(1)), mobileTxRate: Number(rate(mobileTx, previous?.mobileTx ?? mobileTx).toFixed(1)),
+      rxRate: Number(rxRate.toFixed(1)),
+      txRate: Number(txRate.toFixed(1)),
+      diskReadRate: Number(diskReadRate.toFixed(1)),
+      diskWriteRate: Number(diskWriteRate.toFixed(1)),
+      battery: Number((s.battery_pct ?? 0).toFixed(0)),
+      temp: Number((temps.length ? Math.max(...temps.map(x => Number(x.temp_c)).filter(Number.isFinite)) : (s.battery_temp_c ?? 0)).toFixed(1)),
+      cores,
+      cpuCounters: Object.fromEntries((s.cpu_counters || []).map(c => [c.name, { total: c.total, idle: c.idle }])),
+      diskRead, diskWrite,
+      socketTotal, socketTcp, socketUdp
+    });
+    if (state.sensorHistory.length > 60) state.sensorHistory.shift();
+  }
+
+  function renderSparklineSvg(data = [], maxVal = 100, dottedRatio = 0.5, color = 'var(--accent)') {
+    const pointsData = (data.length === 1 ? [data[0], data[0]] : data).map(v => Number(v)).filter(Number.isFinite);
+    if (pointsData.length < 2) {
+      return `<svg class="stat-card-spark" viewBox="0 0 100 48" preserveAspectRatio="none"><line x1="0" y1="24" x2="100" y2="24" stroke="rgba(255,255,255,0.06)" stroke-width="1.5"/></svg>`;
+    }
+    const max = Math.max(maxVal || 1, ...pointsData);
+    const min = Math.min(0, ...pointsData);
+    const range = max - min || 1;
+    const n = pointsData.length;
+    const stepX = 100 / (n - 1);
+    const pts = pointsData.map((v, i) => {
+      const x = (i * stepX).toFixed(1);
+      const norm = Math.max(0.02, Math.min(0.96, (v - min) / range));
+      const y = (46 - norm * 42).toFixed(1);
+      return `${x},${y}`;
+    }).join(' ');
+
+    const gradId = 'spk-' + Math.random().toString(36).slice(2, 7);
+    const dottedLine = dottedRatio != null
+      ? `<line x1="0" y1="${(46 - Math.max(0.05, Math.min(0.95, dottedRatio)) * 42).toFixed(1)}" x2="100" y2="${(46 - Math.max(0.05, Math.min(0.95, dottedRatio)) * 42).toFixed(1)}" stroke="${color}" stroke-opacity="0.4" stroke-dasharray="3,3" stroke-width="1.2"/>`
+      : '';
+
+    return `
+      <svg class="stat-card-spark" viewBox="0 0 100 48" preserveAspectRatio="none" aria-hidden="true">
+        <defs>
+          <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="${color}" stop-opacity="0.38"/>
+            <stop offset="100%" stop-color="${color}" stop-opacity="0.02"/>
+          </linearGradient>
+        </defs>
+        ${dottedLine}
+        <polygon points="0,48 ${pts} 100,48" fill="url(#${gradId})"/>
+        <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+      </svg>
+    `;
+  }
+
+  function renderBigStatCard({ iconCode, title, heroVal, heroUnit = '', subtitle = '', leftStat = '', rightStat = '', data = [], maxVal = 100, dottedRatio = 0.5, color = 'var(--accent)' }) {
+    const spark = renderSparklineSvg(data, maxVal, dottedRatio, color);
+    return `
+      <article class="sensors-stat-card">
+        <div class="stat-card-title"><span class="icon">${icon(iconCode)}</span><span>${escapeHtml(title)}</span></div>
+        <div class="stat-card-hero">
+          <span class="stat-hero-val">${escapeHtml(heroVal)}</span>
+          ${heroUnit ? `<span class="stat-hero-unit">${escapeHtml(heroUnit)}</span>` : ''}
+        </div>
+        <div class="stat-card-sub" title="${escapeHtml(subtitle)}">${escapeHtml(subtitle)}</div>
+        <div class="stat-card-range">
+          <span>${escapeHtml(leftStat)}</span>
