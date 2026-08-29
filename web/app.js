@@ -2302,3 +2302,147 @@
         nameLower.startsWith('[') || nameLower.startsWith('kworker') ||
         nameLower.startsWith('irq/') || nameLower.startsWith('ksoftirqd') ||
         nameLower.startsWith('rcu_') || nameLower.startsWith('migration') ||
+        nameLower.startsWith('kswapd') || nameLower.startsWith('jbd2') ||
+        nameLower.startsWith('cpuhp') || nameLower.startsWith('khugepaged') ||
+        nameLower.startsWith('kcompactd') || nameLower.startsWith('kdevtmpfs') ||
+        nameLower.startsWith('kauditd') || nameLower.startsWith('threadpool') ||
+        nameLower.startsWith('dedicatedworker') || nameLower.startsWith('chrome_') ||
+        nameLower.startsWith('perfetto') || nameLower.startsWith('compositor') ||
+        nameLower.startsWith('js helper') || nameLower.startsWith('v8 ') ||
+        nameLower.startsWith('crashpad') || nameLower.startsWith('sandbox') ||
+        nameLower.startsWith('gmain') || nameLower.startsWith('gdbus')
+      ) {
+        return false;
+      }
+      const bgKeywords = [
+        'systemd', 'dbus', 'polkit', 'accounts-daemon', 'upower', 'udevd', 'cron', 'crond',
+        'syslog', 'rsyslog', 'networkmanager', 'wpa_supplicant', 'bluetoothd', 'cupsd',
+        'avahi-daemon', 'colord', 'boltd', 'thermald', 'auditd', 'atd', 'smartd', 'gdm',
+        'lightdm', 'sddm', 'pipewire', 'wireplumber', 'pulseaudio', 'rtkit-daemon',
+        'packagekitd', 'kerneloops', 'whoopsie', 'unattended-upgr', 'snapd', 'containerd',
+        'dockerd', 'libvirtd', 'libinput-debug', 'systemd-oomd', 'systemd-resolved',
+        'systemd-journald', 'systemd-logind', 'systemd-udevd', 'systemd-timesyncd',
+        'irqbalance', 'acpid', 'mcelog', 'gssproxy', 'rpcbind', 'sshd', 'adbd', 'logd',
+        'servicemanager', 'hwservicemanager', 'vold', 'netd', 'installd', 'keystore'
+      ];
+      return !bgKeywords.some(kw => nameLower.includes(kw));
+    }
+
+    function getAppBaseName(rawName) {
+      let clean = String(rawName || 'Unknown').trim();
+      if (clean.includes('/')) clean = clean.split('/').pop();
+      if (clean.includes(' (sub-')) clean = clean.split(' (sub-')[0];
+      if (clean.includes(':')) clean = clean.split(':')[0];
+      if (clean.includes(' ')) clean = clean.split(' ')[0];
+      return clean || rawName;
+    }
+
+    function formatTmCpu(cpu) {
+      if (cpu < 0.05) return '0%';
+      if (cpu < 10.0) return cpu.toFixed(1) + '%';
+      return Math.round(cpu) + '%';
+    }
+
+    function getTmCpuHeat(cpu) {
+      if (cpu < 0.1) return 'heat-0';
+      if (cpu < 2.0) return 'heat-1';
+      if (cpu < 10.0) return 'heat-2';
+      if (cpu < 25.0) return 'heat-3';
+      return 'heat-4';
+    }
+
+    function formatTmMem(bytes) {
+      if (bytes < 1024 * 1024 * 1024) {
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+      }
+      return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
+    }
+
+    function getTmMemHeat(bytes) {
+      if (bytes < 50 * 1024 * 1024) return 'heat-0';
+      if (bytes < 250 * 1024 * 1024) return 'heat-1';
+      if (bytes < 700 * 1024 * 1024) return 'heat-2';
+      if (bytes < 1800 * 1024 * 1024) return 'heat-3';
+      return 'heat-4';
+    }
+
+    function formatTmDisk(rate) {
+      if (rate == null || !Number.isFinite(rate)) return '—';
+      if (rate < 1024) return Math.round(rate) + ' B/s';
+      if (rate < 1024 * 1024) return (rate / 1024).toFixed(1) + ' KB/s';
+      return (rate / (1024 * 1024)).toFixed(1) + ' MB/s';
+    }
+
+    function formatTmNetworkBytes(bytes) {
+      if (bytes == null || !Number.isFinite(bytes)) return '—';
+      if (bytes < 1024) return `${bytes} B`;
+      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+      if (bytes < 1024 ** 3) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+      return `${(bytes / (1024 ** 3)).toFixed(1)} GB`;
+    }
+
+    function formatTmGpuMemory(bytes) {
+      if (bytes == null || !Number.isFinite(bytes)) return '—';
+      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+      return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    }
+
+    function getTmGpuHeat(bytes) {
+      if (bytes < 16 * 1024 * 1024) return 'heat-0';
+      if (bytes < 64 * 1024 * 1024) return 'heat-1';
+      if (bytes < 256 * 1024 * 1024) return 'heat-2';
+      return 'heat-3';
+    }
+
+    // Only device-reported processes may be selected or terminated.
+    const rawProcList = processes || [];
+    const expandedRawList = rawProcList.map(p => ({
+      pid: p.pid,
+      name: p.name,
+      cpu: Number(p.cpu_usage ?? p.cpu_pct ?? p.cpu ?? 0),
+      mem: Number(p.memory_bytes ?? ((p.memory_kb ?? p.memory ?? 0) * 1024)),
+      disk: p.disk_rate_bps == null ? null : Number(p.disk_rate_bps),
+      networkBytes: p.network_bytes == null ? null : Number(p.network_bytes),
+      gpuMemoryBytes: p.gpu_memory_bytes == null ? null : Number(p.gpu_memory_bytes),
+      uid: p.uid == null ? null : Number(p.uid),
+      status: p.status || 'running'
+    }));
+
+    const groupsMap = new Map();
+    for (const p of expandedRawList) {
+      const baseName = getAppBaseName(p.name);
+      const key = baseName.toLowerCase();
+      if (!groupsMap.has(key)) {
+        groupsMap.set(key, {
+          key,
+          displayName: baseName,
+          isApp: isForegroundApp(key),
+          children: []
+        });
+      }
+      groupsMap.get(key).children.push(p);
+    }
+
+    const normFactor = Math.max(1, s.cpu_cores || 8);
+    const totalSystemCpu = Number(s.cpu_usage_pct ?? state.sensorHistory.at(-1)?.cpu ?? 0);
+    const sysWatts = Number(s.power_watts ?? 0);
+
+    const allGroups = [];
+    for (const grp of groupsMap.values()) {
+      grp.children.sort((a, b) => b.cpu - a.cpu || b.mem - a.mem || a.pid - b.pid);
+      const sumCpu = grp.children.reduce((acc, c) => acc + c.cpu, 0);
+      const sumMem = grp.children.reduce((acc, c) => acc + c.mem, 0);
+      const sumDiskRate = grp.children.reduce((acc, c) => acc + (c.disk || 0), 0);
+      const diskAvailable = grp.children.some(c => c.disk != null);
+      const networkByUid = new Map(grp.children.filter(c => c.uid != null && c.networkBytes != null).map(c => [c.uid, c.networkBytes]));
+      const sumNetworkBytes = networkByUid.size ? [...networkByUid.values()].reduce((sum, bytes) => sum + bytes, 0) : null;
+      const gpuAvailable = grp.children.some(c => c.gpuMemoryBytes != null);
+      const sumGpuMemory = gpuAvailable ? grp.children.reduce((sum, c) => sum + (c.gpuMemoryBytes || 0), 0) : null;
+      const pids = grp.children.map(c => c.pid);
+      const normCpu = sumCpu / normFactor;
+
+      const groupCpuFrac = Math.min(1, Math.max(0, normCpu / 100));
+      const sumPowerWatts = (sysWatts * 0.75 * groupCpuFrac)
+        + Math.min(2, sumDiskRate / 100000000);
+
+      let powerRating = 'Very low';
