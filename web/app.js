@@ -1870,3 +1870,147 @@
         <div class="stat-card-sub" title="${escapeHtml(subtitle)}">${escapeHtml(subtitle)}</div>
         <div class="stat-card-range">
           <span>${escapeHtml(leftStat)}</span>
+          <span>${escapeHtml(rightStat)}</span>
+        </div>
+        <div class="stat-card-spark">${spark}</div>
+      </article>
+    `;
+  }
+
+  function renderDualNetworkSvg(txHistory = [], rxHistory = [], peakVal = 0, accentColor = 'var(--accent)') {
+    const n = Math.max(txHistory.length, rxHistory.length);
+    const h = 190, w = 600;
+    if (n < 2) {
+      return `<div class="chart-empty">Collecting network telemetry samples…</div>`;
+    }
+    const maxV = Math.max(peakVal || 0, ...txHistory, ...rxHistory, 1024);
+    const stepX = (w - 24) / (n - 1);
+    const yBase = h - 18;
+    const yTop = 16;
+    const graphH = yBase - yTop;
+
+    const toPoints = (series) => series.map((v, i) => {
+      const x = (12 + i * stepX).toFixed(1);
+      const norm = Math.max(0.02, Math.min(0.94, (Number(v) || 0) / maxV));
+      const y = (yBase - norm * graphH).toFixed(1);
+      return `${x},${y}`;
+    });
+
+    const txPts = toPoints(txHistory);
+    const rxPts = toPoints(rxHistory);
+
+    const txPoly = txPts.join(' ');
+    const rxPoly = rxPts.join(' ');
+
+    const txArea = `12,${yBase} ${txPoly} ${12 + (txHistory.length - 1) * stepX},${yBase}`;
+    const rxArea = `12,${yBase} ${rxPoly} ${12 + (rxHistory.length - 1) * stepX},${yBase}`;
+
+    const gradTx = 'dnet-tx-' + Math.random().toString(36).slice(2, 7);
+    const gradRx = 'dnet-rx-' + Math.random().toString(36).slice(2, 7);
+    const yPeak = (yTop + graphH * 0.28).toFixed(1);
+
+    return `
+      <svg viewBox="0 0 ${w} ${h}" role="img" aria-label="Network throughput history" preserveAspectRatio="none" style="width:100%;height:${h}px;display:block;">
+        <defs>
+          <linearGradient id="${gradTx}" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="${accentColor}" stop-opacity="0.36"/>
+            <stop offset="100%" stop-color="${accentColor}" stop-opacity="0.02"/>
+          </linearGradient>
+          <linearGradient id="${gradRx}" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.22"/>
+            <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.01"/>
+          </linearGradient>
+        </defs>
+        <line x1="12" y1="${yBase}" x2="${w - 12}" y2="${yBase}" stroke="rgba(255,255,255,0.08)" stroke-width="1.2"/>
+        <line x1="12" y1="${yPeak}" x2="${w - 12}" y2="${yPeak}" stroke="${accentColor}" stroke-opacity="0.5" stroke-dasharray="6,4" stroke-width="1.4"/>
+        <polygon points="${rxArea}" fill="url(#${gradRx})"/>
+        <polyline points="${rxPoly}" fill="none" stroke="#38bdf8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        <polygon points="${txArea}" fill="url(#${gradTx})"/>
+        <polyline points="${txPoly}" fill="none" stroke="${accentColor}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    `;
+  }
+
+  function renderSocketsChartSvg(tcpHistory = [], udpHistory = [], accentColor = 'var(--accent)') {
+    const n = Math.max(tcpHistory.length, udpHistory.length);
+    const h = 190, w = 450;
+    if (n < 2) {
+      return `<div class="chart-empty">Collecting socket telemetry…</div>`;
+    }
+    const maxV = Math.max(10, ...tcpHistory, ...udpHistory);
+    const stepX = (w - 24) / (n - 1);
+    const yBase = h - 18;
+    const yTop = 16;
+    const graphH = yBase - yTop;
+
+    const toPoints = (series) => series.map((v, i) => {
+      const x = (12 + i * stepX).toFixed(1);
+      const norm = Math.max(0.04, Math.min(0.92, (Number(v) || 0) / maxV));
+      const y = (yBase - norm * graphH).toFixed(1);
+      return `${x},${y}`;
+    });
+
+    const tcpPts = toPoints(tcpHistory);
+    const udpPts = toPoints(udpHistory);
+
+    const tcpPoly = tcpPts.join(' ');
+    const udpPoly = udpPts.join(' ');
+
+    const tcpArea = `12,${yBase} ${tcpPoly} ${12 + (tcpHistory.length - 1) * stepX},${yBase}`;
+    const gradTcp = 'sock-tcp-' + Math.random().toString(36).slice(2, 7);
+    const yMid = (yTop + graphH * 0.45).toFixed(1);
+
+    return `
+      <svg viewBox="0 0 ${w} ${h}" role="img" aria-label="Sockets history" preserveAspectRatio="none" style="width:100%;height:${h}px;display:block;">
+        <defs>
+          <linearGradient id="${gradTcp}" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="${accentColor}" stop-opacity="0.36"/>
+            <stop offset="100%" stop-color="${accentColor}" stop-opacity="0.02"/>
+          </linearGradient>
+        </defs>
+        <line x1="12" y1="${yBase}" x2="${w - 12}" y2="${yBase}" stroke="rgba(255,255,255,0.08)" stroke-width="1.2"/>
+        <line x1="12" y1="${yMid}" x2="${w - 12}" y2="${yMid}" stroke="${accentColor}" stroke-opacity="0.4" stroke-dasharray="5,4" stroke-width="1.4"/>
+        <polygon points="${tcpArea}" fill="url(#${gradTcp})"/>
+        <polyline points="${tcpPoly}" fill="none" stroke="${accentColor}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+        <polyline points="${udpPoly}" fill="none" stroke="#94a3b8" stroke-width="2.0" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5,4"/>
+      </svg>
+    `;
+  }
+
+  function renderWaveformChartSvg({ title, series = [], height = 200, suffix = '%', benchmarkVal = null }) {
+    const n = Math.max(...series.map(s => s.data?.length || 0));
+    const w = 800, h = height;
+    if (n < 2) {
+      return `
+        <section class="card sensors-waveform-card">
+          <div class="card-head"><h2>${escapeHtml(title)}</h2><span class="subtle">Collecting samples · ${n}/2</span></div>
+          <div class="waveform-chart-box"><div class="chart-empty">Waveform appears after two live samples.</div></div>
+        </section>
+      `;
+    }
+    const allValues = series.flatMap(s => s.data || []).map(Number).filter(Number.isFinite);
+    let maxV = Math.max(...allValues, 1);
+    let minV = suffix === ' °C' ? Math.floor(Math.min(...allValues) - 2) : Math.min(0, ...allValues);
+    if (suffix === '%' && maxV < 100) maxV = 100;
+    if (maxV === minV) maxV = minV + 1;
+    const range = maxV - minV;
+
+    const formatTick = (val) => {
+      if (suffix === ' B/s') return formatRate(val);
+      if (suffix === ' bytes') return formatBytes(val);
+      if (suffix === ' °C') return `${Math.round(val)}°C`;
+      if (suffix === '%') return `${Math.round(val)}%`;
+      if (suffix === ' W') return `${val >= 10 ? Math.round(val) : val.toFixed(1)}W`;
+      return `${Math.round(val)}${suffix}`;
+    };
+
+    const isLongUnit = suffix === ' B/s' || suffix === ' bytes' || suffix === ' B';
+    const tickRatios = [1.0, 0.75, 0.5, 0.25, 0.0];
+    const tickItems = tickRatios.map(ratio => {
+      const v = minV + ratio * range;
+      const txt = formatTick(v);
+      return { ratio, txt };
+    });
+
+    const maxChars = Math.max(...tickItems.map(t => t.txt.length), 4);
+    const neededLeft = Math.ceil(maxChars * 6.6 + 16);
