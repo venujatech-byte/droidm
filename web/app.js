@@ -2014,3 +2014,147 @@
 
     const maxChars = Math.max(...tickItems.map(t => t.txt.length), 4);
     const neededLeft = Math.ceil(maxChars * 6.6 + 16);
+    const xLeft = isLongUnit ? Math.max(88, neededLeft) : Math.max(56, neededLeft);
+    const xRight = w - 12;
+    const yBase = h - 18;
+    const yTop = 16;
+    const graphH = yBase - yTop;
+    const stepX = (xRight - xLeft) / (n - 1);
+
+    const yAxisTicks = tickItems.map(({ ratio, txt }) => {
+      const y = yBase - ratio * graphH;
+      return `<text x="${xLeft - 8}" y="${(y + 3.5).toFixed(1)}" text-anchor="end" fill="#64748b" font-size="10" font-family="ui-monospace, monospace" font-weight="600">${txt}</text>`;
+    }).join('');
+
+    const legend = series.map((s, idx) => `
+      <span class="chart-legend-item">
+        <i style="background:${s.color || 'var(--accent)'}"></i>
+        ${escapeHtml(s.label)}
+      </span>
+    `).join('');
+
+    const gridLines = [0.25, 0.5, 0.75, 1.0].map(ratio => {
+      const y = (yBase - ratio * graphH).toFixed(1);
+      return `<line x1="${xLeft}" y1="${y}" x2="${xRight}" y2="${y}" stroke="rgba(255,255,255,0.06)" stroke-dasharray="5,5" stroke-width="1"/>`;
+    }).join('');
+
+    const benchmarkLine = benchmarkVal != null
+      ? `<line x1="${xLeft}" y1="${(yBase - Math.max(0.05, Math.min(0.95, (benchmarkVal - minV) / range)) * graphH).toFixed(1)}" x2="${xRight}" y2="${(yBase - Math.max(0.05, Math.min(0.95, (benchmarkVal - minV) / range)) * graphH).toFixed(1)}" stroke="var(--accent)" stroke-opacity="0.5" stroke-dasharray="6,4" stroke-width="1.4"/>`
+      : '';
+
+    const paths = series.map((s, idx) => {
+      const d = s.data || [];
+      const pts = d.map((v, i) => {
+        const x = (xLeft + i * stepX).toFixed(1);
+        const norm = Math.max(0.02, Math.min(0.98, ((Number(v) || 0) - minV) / range));
+        const y = (yBase - norm * graphH).toFixed(1);
+        return `${x},${y}`;
+      });
+      const poly = pts.join(' ');
+      const area = `${xLeft},${yBase} ${poly} ${xLeft + (d.length - 1) * stepX},${yBase}`;
+      const gradId = 'wf-grad-' + idx + '-' + Math.random().toString(36).slice(2, 6);
+      return `
+        <defs>
+          <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="${s.color || 'var(--accent)'}" stop-opacity="${s.fillOpacity ?? 0.32}"/>
+            <stop offset="100%" stop-color="${s.color || 'var(--accent)'}" stop-opacity="0.01"/>
+          </linearGradient>
+        </defs>
+        <polygon points="${area}" fill="url(#${gradId})"/>
+        <polyline points="${poly}" fill="none" stroke="${s.color || 'var(--accent)'}" stroke-width="${s.strokeWidth || 2.5}" stroke-linecap="round" stroke-linejoin="round"/>
+      `;
+    }).join('');
+
+    return `
+      <section class="card sensors-waveform-card">
+        <div class="card-head">
+          <h2>${escapeHtml(title)}</h2>
+          <div class="chart-legend">${legend}</div>
+        </div>
+        <div class="waveform-chart-box">
+          <svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${escapeHtml(title)}" preserveAspectRatio="none" style="width:100%;height:${h}px;display:block;overflow:visible;">
+            <line x1="${xLeft}" y1="${yBase}" x2="${xRight}" y2="${yBase}" stroke="rgba(255,255,255,0.08)" stroke-width="1.2"/>
+            ${yAxisTicks}
+            ${gridLines}
+            ${benchmarkLine}
+            ${paths}
+          </svg>
+        </div>
+        <div class="waveform-time-axis" style="padding-left: calc(6px + ${(xLeft / w * 100).toFixed(2)}%); padding-right: calc(6px + ${((w - xRight) / w * 100).toFixed(2)}%);">
+          <span>60s ago</span>
+          <span>45s</span>
+          <span>30s</span>
+          <span>15s</span>
+          <span>Now</span>
+        </div>
+      </section>
+    `;
+  }
+
+  function renderLivePowerWaveformSvg(data, currentWatts, height = 76) {
+    const w = 400, h = height;
+    const ptsCount = data.length || 1;
+    const maxW = Math.max(25, ...data, currentWatts * 1.25);
+    const minW = 0;
+    const range = maxW - minW || 1;
+    const yBase = h - 10;
+    const yTop = 16;
+    const graphH = yBase - yTop;
+    const stepX = (w - 30) / Math.max(1, ptsCount - 1);
+
+    const pts = data.map((v, i) => {
+      const x = (15 + i * stepX).toFixed(1);
+      const norm = Math.max(0.05, Math.min(0.95, (Number(v) - minW) / range));
+      const y = (yBase - norm * graphH).toFixed(1);
+      return { x: Number(x), y: Number(y) };
+    });
+
+    const poly = pts.map(p => `${p.x},${p.y}`).join(' ');
+    const lastPt = pts.at(-1) || { x: w - 15, y: yBase - 0.5 * graphH };
+    const area = `15,${yBase} ${poly} ${lastPt.x},${yBase}`;
+
+    const gridLines = [0.33, 0.66].map(r => {
+      const y = (yBase - r * graphH).toFixed(1);
+      return `<line x1="15" y1="${y}" x2="${w - 15}" y2="${y}" stroke="rgba(255,255,255,0.06)" stroke-dasharray="4,4" stroke-width="1"/>`;
+    }).join('');
+
+    const pillX = Math.min(w - 75, Math.max(65, lastPt.x - 45));
+    const pillY = Math.max(14, lastPt.y - 14);
+
+    return `
+      <div class="power-waveform-box">
+        <svg viewBox="0 0 ${w} ${h}" role="img" aria-label="Power Draw Waveform" preserveAspectRatio="none" style="width:100%;height:${h}px;display:block;">
+          <defs>
+            <linearGradient id="power-wf-grad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.35"/>
+              <stop offset="100%" stop-color="var(--accent)" stop-opacity="0.02"/>
+            </linearGradient>
+          </defs>
+          ${gridLines}
+          <line x1="15" y1="${yBase}" x2="${w - 15}" y2="${yBase}" stroke="rgba(255,255,255,0.08)" stroke-width="1.2"/>
+          <polygon points="${area}" fill="url(#power-wf-grad)"/>
+          <polyline points="${poly}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <rect x="${pillX - 40}" y="${pillY - 10}" width="82" height="18" rx="9" fill="#0b1322" stroke="var(--accent)" stroke-width="1.2" stroke-opacity="0.6"/>
+          <text x="${pillX + 1}" y="${pillY + 2.5}" text-anchor="middle" fill="#f1f5f9" font-size="9" font-family="ui-monospace, monospace" font-weight="700" letter-spacing="0.4px">${currentWatts.toFixed(1)} W LOAD</text>
+          <circle cx="${lastPt.x}" cy="${lastPt.y}" r="6" fill="var(--accent)" fill-opacity="0.25"/>
+          <circle cx="${lastPt.x}" cy="${lastPt.y}" r="3" fill="#ffffff" stroke="var(--accent)" stroke-width="1.5"/>
+        </svg>
+      </div>
+    `;
+  }
+
+  async function pollSensors(force = false) {
+    if (state.sensorBusy || state.tab !== 'sensors' || (!force && (document.hidden || state.sensorsCadence === 0))) return;
+    state.sensorBusy = true;
+    try {
+      await loadData('sensors');
+      if (state.tab === 'sensors' && !document.activeElement?.matches('#sensor-app-filter')) {
+        renderSensors();
+      }
+    } finally {
+      state.sensorBusy = false;
+      if (state.tab === 'sensors' && state.sensorsCadence > 0 && !document.hidden) {
+        clearTimeout(state.sensorTimer);
+        state.sensorTimer = setTimeout(pollSensors, state.sensorsCadence);
+      }
+    }
