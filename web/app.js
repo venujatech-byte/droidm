@@ -2158,3 +2158,147 @@
         state.sensorTimer = setTimeout(pollSensors, state.sensorsCadence);
       }
     }
+  }
+
+  function renderHardwareSensors() {
+    if (!state.sensorInventoryLoaded) {
+      content.innerHTML = `<section class="card">${state.sensorInventoryLoading ? 'Reading Android sensors…' : 'Loading Android sensors…'}</section>`;
+      if (!state.sensorInventoryLoading && state.serial) {
+        state.sensorInventoryLoading = true;
+        const serial = state.serial;
+        Promise.all([
+          invokeOrFail('adb_data', { serial, section: 'sensor_inventory', path: null }),
+          invokeOrFail('adb_data', { serial, section: 'sensor_readings', path: null })
+        ]).then(([names, readings]) => {
+          if (state.serial === serial) {
+            state.sensorInventory = names;
+            state.sensorReadings = readings;
+            state.sensorSelected = names[0] || '';
+            state.sensorInventoryLoaded = true;
+          }
+        }).catch((error) => {
+          if (state.serial === serial) state.sensorInventoryLoaded = true;
+          toast(String(error), true);
+        }).finally(() => {
+          state.sensorInventoryLoading = false;
+          if (state.tab === 'hardware-sensors' && state.serial === serial) renderHardwareSensors();
+        });
+      }
+      return;
+    }
+    const category = (name) => /fingerprint/i.test(name) ? 'Biometrics'
+      : /(accelerometer|gyroscope|magnetometer|rotation|gravity|linear acceleration|step counter|step detector)/i.test(name) ? 'Motion & orientation'
+      : /(ambient light|proximity|pressure|temperature|humidity)/i.test(name) ? 'Environment'
+      : /(heart|health)/i.test(name) ? 'Health' : 'Other';
+    const groups = new Map();
+    for (const name of state.sensorInventory) {
+      const kind = category(name);
+      if (!groups.has(kind)) groups.set(kind, []);
+      groups.get(kind).push(name);
+    }
+    const selected = state.sensorSelected || state.sensorInventory[0] || '';
+    state.sensorSelected = selected;
+    const reading = state.sensorReadings.find((item) => item.name.toLowerCase() === selected.toLowerCase());
+    const labels = /accelerometer|gyroscope|magnetometer/i.test(selected) ? ['X', 'Y', 'Z', 'W'] : /light|als/i.test(selected) ? ['Illuminance', 'Value 2', 'Value 3'] : /proximity/i.test(selected) ? ['Distance', 'Value 2', 'Value 3'] : [];
+    content.innerHTML = `<section class="card"><div class="card-head"><div><h2>Sensor readings</h2><span class="subtle">${state.sensorInventory.length} hardware sensors · latest Android events</span></div><button class="button" id="sensor-readings-refresh" ${state.sensorInventoryLoading ? 'disabled' : ''}>${icon('e145')} Refresh readings</button></div>${state.sensorInventory.length ? `<div class="sensor-inspector"><aside class="sensor-inspector-list" aria-label="Hardware sensors">${[...groups].map(([kind, names]) => `<div class="sensor-inspector-group"><span class="sensor-inspector-heading">${escapeHtml(kind)}</span>${names.map((name) => `<button class="sensor-inspector-item ${name === selected ? 'active' : ''}" data-sensor-select="${escapeHtml(name)}"><span class="icon">&#xe186;</span><span>${escapeHtml(name)}</span><i class="${state.sensorReadings.some((item) => item.name.toLowerCase() === name.toLowerCase()) ? 'has-reading' : ''}"></i></button>`).join('')}</div>`).join('')}</aside><section class="sensor-reading-panel"><div class="sensor-reading-title"><div><span class="eyebrow">SELECTED SENSOR</span><h3>${escapeHtml(selected)}</h3></div><span class="chip ${reading ? 'sensor-live-chip' : ''}">${reading ? 'EVENT AVAILABLE' : 'NO RECENT EVENT'}</span></div>${reading ? `<div class="sensor-reading-values">${reading.values.map((value, index) => `<article class="sensor-reading-value"><span>${escapeHtml(labels[index] || `Value ${index + 1}`)}</span><b>${Number(value).toFixed(3)}</b></article>`).join('')}</div><div class="sensor-reading-meta">Latest cached event · ${escapeHtml(reading.time || 'time unavailable')}</div>` : `<div class="sensor-reading-empty"><span class="icon">&#xe1ae;</span><b>No recent reading</b><span>Android only reports values after an app or system service activates this sensor.</span></div>`}</section></div>` : empty('No sensor inventory available', 'Android SensorService did not report hardware sensors.')}</section>`;
+    $('#sensor-readings-refresh').onclick = async () => {
+      const serial = state.serial;
+      const button = $('#sensor-readings-refresh');
+      button.disabled = true;
+      try { state.sensorReadings = await invokeOrFail('adb_data', { serial, section: 'sensor_readings', path: null }); }
+      catch (error) { toast(String(error), true); }
+      finally { if (state.tab === 'hardware-sensors' && state.serial === serial) renderHardwareSensors(); }
+    };
+    content.querySelectorAll('[data-sensor-select]').forEach((button) => {
+      button.onclick = () => { state.sensorSelected = button.dataset.sensorSelect; renderHardwareSensors(); };
+    });
+  }
+
+  function renderSensors() {
+    const s = state.data || {}, t = state.telemetry || {};
+    const subtabs = [
+      ['overview', 'Overview', 'e038'],
+      ['top-apps', 'Top Apps', 'e129'],
+      ['cpu', 'CPU', 'e0a9'],
+      ['ram', 'RAM', 'e445'],
+      ['gpu', 'GPU', 'e0df'],
+      ['storage', 'Storage', 'e0c5'],
+      ['wifi', 'Wi-Fi', 'e1ae'],
+      ['cellular', 'Cellular', 'e142'],
+      ['data-usage', 'Data Usage', 'e125'],
+      ['power', 'Power', 'e055'],
+      ['bluetooth', 'Bluetooth', 'e05c'],
+      ['temperature', 'Temperature', 'e186']
+    ];
+
+    const kb = (value) => {
+      if (value == null || !Number.isFinite(Number(value))) return 'Unavailable';
+      return `${(Number(value) / 1024 / 1024).toFixed(2)} GB`;
+    };
+    const onOff = (value) => value == null ? 'Unavailable' : value ? 'On' : 'Off';
+    const avg = (arr) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+    const peak = (arr) => arr.length ? Math.max(...arr) : 0;
+
+    const currentCpu = Number(s.cpu_usage_pct ?? state.sensorHistory.at(-1)?.cpu ?? 0);
+    const memUsage = s.mem_total_kb && s.mem_available_kb != null ? (100 * (s.mem_total_kb - s.mem_available_kb) / s.mem_total_kb) : 0;
+    const usedMemoryKb = s.mem_total_kb && s.mem_available_kb != null ? s.mem_total_kb - s.mem_available_kb : 0;
+    const swapUsage = s.swap_total_kb ? (100 * (s.swap_total_kb - (s.swap_free_kb || 0)) / s.swap_total_kb) : 0;
+    const usedSwapKb = s.swap_total_kb ? s.swap_total_kb - (s.swap_free_kb || 0) : 0;
+
+    const totalStorageGb = s.storage_internal_total_kb == null ? (Number(t.storage_internal_total_gb) || 0) : Number(s.storage_internal_total_kb) / 1024 / 1024;
+    const freeStorageGb = s.storage_internal_free_kb == null ? (Number(t.storage_internal_free_gb) || 0) : Number(s.storage_internal_free_kb) / 1024 / 1024;
+    const usedStorageGb = Math.max(0, totalStorageGb - freeStorageGb);
+    const storageUsage = totalStorageGb > 0 ? (100 * usedStorageGb / totalStorageGb) : 0;
+
+    const network = s.network_interfaces || [];
+    const temps = s.temperatures || [];
+    const processes = s.top_processes || [];
+    const sensors = state.sensorInventoryLoaded ? state.sensorInventory : (s.sensor_names || []);
+
+    const hist = state.sensorHistory;
+    const cpuHist = hist.map(h => Number(h.cpu) || 0);
+    const ramHist = hist.map(h => Number(h.ram) || 0);
+    const swapHist = hist.map(h => Number(h.swap) || 0);
+    const storageHist = hist.map(h => Number(h.storage) || 0);
+    const rxHist = hist.map(h => Number(h.rxRate) || 0);
+    const txHist = hist.map(h => Number(h.txRate) || 0);
+    const readHist = hist.map(h => Number(h.diskReadRate) || 0);
+    const writeHist = hist.map(h => Number(h.diskWriteRate) || 0);
+    const tcpHist = hist.map(h => Number(h.socketTcp) || 0);
+    const udpHist = hist.map(h => Number(h.socketUdp) || 0);
+    const battHist = hist.map(h => Number(h.battery) || 0);
+    const tempHist = hist.map(h => Number(h.temp) || 0);
+
+    const latest = hist.at(-1) || {};
+    const currRxRate = Number(latest.rxRate) || 0;
+    const currTxRate = Number(latest.txRate) || 0;
+    const netPeakRate = Math.max(1024, ...rxHist, ...txHist);
+    const totRx = network.reduce((acc, iface) => acc + (Number(iface.rx_bytes) || 0), 0);
+    const totTx = network.reduce((acc, iface) => acc + (Number(iface.tx_bytes) || 0), 0);
+    const usageType = state.dataUsageNetwork === 'mobile' ? 'mobile' : 'wifi';
+    const usagePattern = usageType === 'wifi' ? /^(wlan|wifi)/i : /^(rmnet|ccmni|wwan|pdp)/i;
+    const usageIfaces = network.filter((iface) => usagePattern.test(iface.name));
+    const usageRx = usageIfaces.reduce((sum, iface) => sum + (Number(iface.rx_bytes) || 0), 0);
+    const usageTx = usageIfaces.reduce((sum, iface) => sum + (Number(iface.tx_bytes) || 0), 0);
+    const usageHistory = hist.map((sample) => ({ rx: Number(sample[`${usageType}Rx`]) || 0, tx: Number(sample[`${usageType}Tx`]) || 0, rxRate: Number(sample[`${usageType}RxRate`]) || 0, txRate: Number(sample[`${usageType}TxRate`]) || 0 }));
+    const usageRxRate = Number(latest[`${usageType}RxRate`]) || 0, usageTxRate = Number(latest[`${usageType}TxRate`]) || 0;
+    const avgRxRate = avg(rxHist);
+    const avgTxRate = avg(txHist);
+
+    const socketTotal = Number(latest.socketTotal || s.socket_total || 0);
+    const socketTcp = Number(latest.socketTcp || s.socket_tcp || 0);
+    const socketUdp = Number(latest.socketUdp || s.socket_udp || 0);
+
+    const freqGhz = s.cpu_frequencies_mhz?.length ? (Math.max(...s.cpu_frequencies_mhz) / 1000).toFixed(2) : '2.00';
+    const minFreqMhz = s.cpu_frequencies_mhz?.length ? (Math.min(...s.cpu_frequencies_mhz) / 1000).toFixed(2) : '1.00';
+    const uptimeHours = s.uptime_secs ? Math.floor(s.uptime_secs / 3600) : 0;
+    const uptimeMins = s.uptime_secs ? Math.floor((s.uptime_secs % 3600) / 60) : 0;
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // WINDOWS TASK MANAGER: Authentic Two-Tier Header Process Grid
+    // ══════════════════════════════════════════════════════════════════════════
+    function isForegroundApp(nameLower) {
+      if (
+        nameLower.startsWith('[') || nameLower.startsWith('kworker') ||
+        nameLower.startsWith('irq/') || nameLower.startsWith('ksoftirqd') ||
+        nameLower.startsWith('rcu_') || nameLower.startsWith('migration') ||
