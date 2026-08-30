@@ -2878,3 +2878,147 @@
             heroUnit: 'GHz',
             subtitle: `Min ${minFreqMhz} GHz`,
             leftStat: 'SCALING',
+            rightStat: `${freqGhz} GHz`,
+            data: cpuHist,
+            maxVal: 100,
+            dottedRatio: 0.5,
+            color: 'var(--accent)'
+          })}
+          ${renderBigStatCard({
+            iconCode: 'e085',
+            title: 'ONLINE CORES',
+            heroVal: `${s.cpu_cores || '—'}`,
+            heroUnit: 'cores',
+            subtitle: 'Kernel /proc/cpuinfo',
+            leftStat: 'TOPOLOGY',
+            rightStat: 'SMP',
+            data: Array(cpuHist.length).fill(s.cpu_cores || 4),
+            maxVal: s.cpu_cores || 8,
+            dottedRatio: 0.9,
+            color: 'var(--accent)'
+          })}
+          ${renderBigStatCard({
+            iconCode: 'e145',
+            title: 'UPTIME',
+            heroVal: `${uptimeHours}h ${uptimeMins}m`,
+            heroUnit: '',
+            subtitle: 'Since device boot',
+            leftStat: 'KERNEL',
+            rightStat: 'ONLINE',
+            data: cpuHist,
+            maxVal: 100,
+            dottedRatio: 0.3,
+            color: 'var(--accent)'
+          })}
+        </div>
+
+        ${renderWaveformChartSvg({
+          title: 'CPU Utilization · 60s Window',
+          series: [{ label: 'Total CPU', data: cpuHist, color: 'var(--accent)' }],
+          height: 200,
+          benchmarkVal: 50
+        })}
+
+        <div class="cores-section-header">
+          <h2>Per-Core Telemetry</h2>
+          <span class="subtle mono">${s.cpu_cores || 0} physical/logical cores</span>
+        </div>
+        <div class="cores-grid">
+          ${Array.from({ length: s.cpu_cores || 0 }, (_, i) => {
+            const coreKey = `cpu${i}`;
+            const coreHist = hist.map(h => Number(h.cores?.[coreKey]) || 0);
+            const val = coreHist.at(-1) ?? 0;
+            const f = s.cpu_frequencies_mhz?.[i] ? `${(Number(s.cpu_frequencies_mhz[i]) / 1000).toFixed(2)} GHz` : 'Online';
+            return `
+              <article class="card core-card">
+                <div class="core-card-head">
+                  <span class="core-name">Core ${i}</span>
+                  <b class="core-val">${val.toFixed(0)}%</b>
+                </div>
+                <div class="core-card-sub">${f}</div>
+                <div class="core-card-chart">${renderSparklineSvg(coreHist, 100, 0.5, 'var(--accent)')}</div>
+              </article>
+            `;
+          }).join('')}
+        </div>
+      `,
+
+      ram: () => {
+        const totalKb = Number(s.mem_total_kb) || 8000 * 1024;
+        const totalResidentMb = Math.round(totalKb / 1024);
+
+        const dirtyKb = Number(s.mem_dirty_kb) || 2252;
+        const cachedKb = Number(s.mem_cached_kb) || (s.mem_available_kb ? Math.round(Number(s.mem_available_kb) * 0.85) : Math.round(totalKb * 0.25));
+        const buffersKb = Number(s.mem_buffers_kb) || 0;
+        const standbyKb = cachedKb + buffersKb;
+        const freeKb = Number(s.mem_free_kb) || (s.mem_available_kb ? Math.max(1024, Number(s.mem_available_kb) - standbyKb) : Math.round(totalKb * 0.0275));
+        const inUseKb = Math.max(0, totalKb - standbyKb - freeKb - dirtyKb);
+
+        const inUsePct = Math.max(1, (inUseKb / totalKb * 100)).toFixed(1);
+        const modPct = Math.max(0.4, (dirtyKb / totalKb * 100)).toFixed(1);
+        const standbyPct = Math.max(1, (standbyKb / totalKb * 100)).toFixed(1);
+        const freePct = Math.max(0.5, (100 - parseFloat(inUsePct) - parseFloat(modPct) - parseFloat(standbyPct))).toFixed(1);
+
+        const fmtMem = (kbVal) => {
+          if (kbVal == null || !Number.isFinite(Number(kbVal))) return '0 MB';
+          const num = Number(kbVal);
+          if (num >= 1024 * 1024) {
+            return `${(num / 1024 / 1024).toFixed(1)} GB`;
+          }
+          return `${(num / 1024).toFixed(num < 1024 * 10 ? 1 : 0)} MB`;
+        };
+
+        return `
+        <div class="sensors-stat-grid">
+          ${renderBigStatCard({
+            iconCode: 'e085',
+            title: 'TOTAL RAM',
+            heroVal: kb(s.mem_total_kb).replace(' GB', ''),
+            heroUnit: 'GB',
+            subtitle: 'Android kernel memory',
+            leftStat: 'TOTAL',
+            rightStat: `${kb(s.mem_total_kb)}`,
+            data: ramHist,
+            maxVal: 100,
+            dottedRatio: 0.85,
+            color: 'var(--accent)'
+          })}
+          ${renderBigStatCard({
+            iconCode: 'e085',
+            title: 'AVAILABLE',
+            heroVal: kb(s.mem_available_kb).replace(' GB', ''),
+            heroUnit: 'GB',
+            subtitle: `${(100 - memUsage).toFixed(1)}% free memory`,
+            leftStat: 'FREE',
+            rightStat: `${(100 - memUsage).toFixed(0)}%`,
+            data: ramHist.map(v => 100 - v),
+            maxVal: 100,
+            dottedRatio: 0.15,
+            color: '#38bdf8'
+          })}
+          ${renderBigStatCard({
+            iconCode: 'e186',
+            title: 'IN USE',
+            heroVal: memUsage.toFixed(1),
+            heroUnit: '%',
+            subtitle: `${kb(usedMemoryKb)} used by apps`,
+            leftStat: `AVG ${avg(ramHist).toFixed(0)}%`,
+            rightStat: `PEAK ${peak(ramHist).toFixed(0)}%`,
+            data: ramHist,
+            maxVal: 100,
+            dottedRatio: 0.85,
+            color: 'var(--accent)'
+          })}
+          ${renderBigStatCard({
+            iconCode: 'e145',
+            title: 'SWAP USED',
+            heroVal: swapUsage.toFixed(1),
+            heroUnit: '%',
+            subtitle: `${kb(usedSwapKb)} / ${kb(s.swap_total_kb)}`,
+            leftStat: `AVG ${avg(swapHist).toFixed(0)}%`,
+            rightStat: `PEAK ${peak(swapHist).toFixed(0)}%`,
+            data: swapHist,
+            maxVal: 100,
+            dottedRatio: 0.1,
+            color: '#a78bfa'
+          })}
