@@ -2446,3 +2446,147 @@
         + Math.min(2, sumDiskRate / 100000000);
 
       let powerRating = 'Very low';
+      if (sumPowerWatts >= 15.0 || normCpu >= 32.0) {
+        powerRating = 'Very high';
+      } else if (sumPowerWatts >= 7.0 || normCpu >= 16.0) {
+        powerRating = 'High';
+      } else if (sumPowerWatts >= 2.5 || normCpu >= 6.0) {
+        powerRating = 'Moderate';
+      } else if (sumPowerWatts >= 0.8 || normCpu >= 1.0) {
+        powerRating = 'Low';
+      }
+
+      allGroups.push({
+        ...grp,
+        sumCpu,
+        normCpu,
+        sumMem,
+        sumDiskRate,
+        diskAvailable,
+        sumNetworkBytes,
+        sumGpuMemory,
+        sumPowerWatts,
+        powerRating,
+        pids
+      });
+    }
+
+    const searchQ = (state.topAppsSearch || state.sensorFilter || '').trim().toLowerCase();
+    const filteredGroups = searchQ ? allGroups.filter(g =>
+      g.displayName.toLowerCase().includes(searchQ) ||
+      g.pids.some(p => String(p).includes(searchQ))
+    ) : allGroups;
+
+    const sortCol = state.topAppsSort || 'mem';
+    const sortDesc = state.topAppsSortDesc !== false;
+
+    filteredGroups.sort((a, b) => {
+      let res = 0;
+      if (sortCol === 'name') {
+        res = a.displayName.localeCompare(b.displayName);
+      } else if (sortCol === 'cpu') {
+        res = a.sumCpu - b.sumCpu;
+      } else if (sortCol === 'mem') {
+        res = a.sumMem - b.sumMem;
+      } else if (sortCol === 'disk') {
+        res = a.sumDiskRate - b.sumDiskRate;
+      } else if (sortCol === 'net') {
+        res = (a.sumNetworkBytes || 0) - (b.sumNetworkBytes || 0);
+      } else if (sortCol === 'gpu') {
+        res = (a.sumGpuMemory || 0) - (b.sumGpuMemory || 0);
+      } else if (sortCol === 'power') {
+        res = a.sumPowerWatts - b.sumPowerWatts;
+      }
+      return sortDesc ? -res : res;
+    });
+
+    const appsGroups = filteredGroups.filter(g => g.isApp);
+    const bgGroups = filteredGroups.filter(g => !g.isApp);
+
+    const headerCpu = s.cpu_usage_pct != null || state.sensorHistory.length ? Math.round(totalSystemCpu) + '%' : '—';
+    const headerMem = memUsage != null ? Math.round(memUsage) + '%' : '—';
+    const headerDisk = '—';
+    const headerNet = '—';
+    const gpuGroups = allGroups.filter(group => group.sumGpuMemory != null);
+    const headerGpu = gpuGroups.length
+      ? formatTmGpuMemory(gpuGroups.reduce((sum, group) => sum + group.sumGpuMemory, 0))
+      : '—';
+    const headerPower = s.power_watts != null ? `${sysWatts} W` : '—';
+
+    function renderGroupRow(grp) {
+      const isMulti = grp.children.length > 1;
+      const isExpanded = state.topAppsExpandedGroups instanceof Set ? state.topAppsExpandedGroups.has(grp.key) : false;
+      const isSelected = state.topAppsSelectedPid === grp.pids[0] || (!isExpanded && grp.pids.includes(state.topAppsSelectedPid));
+
+      const cpuHeat = getTmCpuHeat(grp.normCpu);
+      const memHeat = getTmMemHeat(grp.sumMem);
+      const gpuHeat = getTmGpuHeat(grp.sumGpuMemory || 0);
+
+      let pwrHtml = '';
+      if (grp.powerRating === 'Very low') {
+        pwrHtml = `<span class="tm-pwr-very-low">Very low</span>`;
+      } else if (grp.powerRating === 'Low') {
+        pwrHtml = `<span class="tm-pwr-pill tm-pwr-low">Low</span>`;
+      } else if (grp.powerRating === 'Moderate') {
+        pwrHtml = `<span class="tm-pwr-pill tm-pwr-moderate">Moderate</span>`;
+      } else if (grp.powerRating === 'High') {
+        pwrHtml = `<span class="tm-pwr-pill tm-pwr-high">High</span>`;
+      } else {
+        pwrHtml = `<span class="tm-pwr-pill tm-pwr-very-high">Very high</span>`;
+      }
+
+      let rowsHtml = `
+        <div class="tm-row ${isSelected ? 'selected' : ''}" data-pid="${grp.pids[0]}" data-key="${escapeHtml(grp.key)}">
+          <div class="tm-cell col-name">
+            ${isMulti ? `
+              <button class="tm-expander-btn" data-toggle-group="${escapeHtml(grp.key)}" title="${isExpanded ? 'Collapse' : 'Expand'} subprocesses">
+                <span class="tm-chevron ${isExpanded ? 'expanded' : ''}">›</span>
+              </button>
+            ` : `<span class="tm-expander-spacer"></span>`}
+            <svg class="tm-app-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="3" width="20" height="14" rx="2"></rect>
+              <line x1="8" y1="21" x2="16" y2="21"></line>
+              <line x1="12" y1="17" x2="12" y2="21"></line>
+            </svg>
+            <span class="tm-app-name" title="${escapeHtml(grp.displayName)}">${escapeHtml(grp.displayName)}${isMulti ? ` (${grp.children.length})` : ''}</span>
+          </div>
+          <div class="tm-cell col-metric">
+            <span class="tm-heat-block ${cpuHeat}">${formatTmCpu(grp.normCpu)}</span>
+          </div>
+          <div class="tm-cell col-metric">
+            <span class="tm-heat-block ${memHeat}">${formatTmMem(grp.sumMem)}</span>
+          </div>
+          <div class="tm-cell col-metric">
+            <span class="tm-heat-block heat-0">${formatTmDisk(grp.diskAvailable ? grp.sumDiskRate : null)}</span>
+          </div>
+          <div class="tm-cell col-metric">
+            <span class="tm-heat-block heat-0">${formatTmNetworkBytes(grp.sumNetworkBytes)}</span>
+          </div>
+          <div class="tm-cell col-metric">
+            <span class="tm-heat-block ${gpuHeat}">${formatTmGpuMemory(grp.sumGpuMemory)}</span>
+          </div>
+          <div class="tm-cell col-metric">
+            <div class="tm-pwr-cell">${pwrHtml}</div>
+          </div>
+        </div>
+      `;
+
+      if (isMulti && isExpanded) {
+        for (const child of grp.children) {
+          const childNormCpu = child.cpu / normFactor;
+          const isChildSel = state.topAppsSelectedPid === child.pid;
+          rowsHtml += `
+            <div class="tm-row tm-child-row ${isChildSel ? 'selected' : ''}" data-pid="${child.pid}">
+              <div class="tm-cell col-name">
+                <span class="tm-child-pid">PID ${child.pid}</span>
+                <span class="tm-app-name">${escapeHtml(child.name)}</span>
+              </div>
+              <div class="tm-cell col-metric">
+                <span class="tm-heat-block heat-0">${formatTmCpu(childNormCpu)}</span>
+              </div>
+              <div class="tm-cell col-metric">
+                <span class="tm-heat-block heat-0">${formatTmMem(child.mem)}</span>
+              </div>
+              <div class="tm-cell col-metric">
+                <span class="tm-heat-block heat-0">${formatTmDisk(child.disk)}</span>
+              </div>
