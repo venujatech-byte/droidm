@@ -2590,3 +2590,147 @@
               <div class="tm-cell col-metric">
                 <span class="tm-heat-block heat-0">${formatTmDisk(child.disk)}</span>
               </div>
+              <div class="tm-cell col-metric">
+                <span class="tm-heat-block heat-0" title="Network usage is tracked by Android per app UID">—</span>
+              </div>
+              <div class="tm-cell col-metric">
+                <span class="tm-heat-block heat-0">${formatTmGpuMemory(child.gpuMemoryBytes)}</span>
+              </div>
+              <div class="tm-cell col-metric">
+                <div class="tm-pwr-cell"><span class="tm-pwr-very-low">Very low</span></div>
+              </div>
+            </div>
+          `;
+        }
+      }
+
+      return rowsHtml;
+    }
+
+    const topAppsTable = () => `
+      <section class="tm-card">
+        <div class="tm-toolbar">
+          <div class="tm-toolbar-left">
+            <span class="tm-title">Processes</span>
+            <span class="tm-count-pill">${expandedRawList.length} processes</span>
+          </div>
+          <div class="tm-toolbar-right">
+            <div class="tm-actions-row">
+              <select class="tm-interval-select" id="tm-refresh-cadence" aria-label="Refresh interval">
+                <option value="1000" ${state.sensorsCadence === 1000 ? 'selected' : ''}>⏱ 1s (High)</option>
+                <option value="2000" ${state.sensorsCadence === 2000 ? 'selected' : ''}>⏱ 2s (Fast)</option>
+                <option value="5000" ${state.sensorsCadence === 5000 ? 'selected' : ''}>⏱ 5s (Default)</option>
+                <option value="10000" ${state.sensorsCadence === 10000 ? 'selected' : ''}>⏱ 10s (Low)</option>
+                <option value="0" ${state.sensorsCadence === 0 ? 'selected' : ''}>⏱ Paused</option>
+              </select>
+            </div>
+            <div class="tm-search-wrap">
+              <svg class="tm-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+              <input class="tm-search-input" id="sensor-app-filter" aria-label="Search processes by name or PID" value="${escapeHtml(state.topAppsSearch || state.sensorFilter || '')}" placeholder="Search by name or PID...">
+              ${(state.topAppsSearch || state.sensorFilter) ? `<button class="tm-search-clear" id="sensor-app-filter-clear">✕</button>` : ''}
+            </div>
+              <button class="tm-end-task-btn ${state.topAppsSelectedPid ? 'active' : 'disabled'}" id="tm-btn-end-task" ${!state.topAppsSelectedPid ? 'disabled' : ''}>
+                ✕ ${state.topAppsSelectedPid ? `End task (PID ${state.topAppsSelectedPid})` : 'End task'}
+              </button>
+          </div>
+        </div>
+
+        <div class="tm-table-wrap">
+          <div class="tm-grid">
+            <!-- Two-tier Stacked Headers -->
+            <div class="tm-header-row">
+              <div class="tm-header-cell col-name ${sortCol === 'name' ? 'sorted' : ''}" data-sort="name">
+                <div class="tm-header-bottom-label">Name <span class="tm-sort-arrow">${sortCol === 'name' ? (sortDesc ? '↓' : '↑') : ''}</span></div>
+              </div>
+              <div class="tm-header-cell col-metric ${sortCol === 'cpu' ? 'sorted' : ''}" data-sort="cpu">
+                <div class="tm-header-top-val">${headerCpu}</div>
+                <div class="tm-header-bottom-label">CPU <span class="tm-sort-arrow">${sortCol === 'cpu' ? (sortDesc ? '↓' : '↑') : ''}</span></div>
+              </div>
+              <div class="tm-header-cell col-metric ${sortCol === 'mem' ? 'sorted' : ''}" data-sort="mem">
+                <div class="tm-header-top-val">${headerMem}</div>
+                <div class="tm-header-bottom-label">Memory <span class="tm-sort-arrow">${sortCol === 'mem' ? (sortDesc ? '↓' : '↑') : ''}</span></div>
+              </div>
+              <div class="tm-header-cell col-metric ${sortCol === 'disk' ? 'sorted' : ''}" data-sort="disk">
+                <div class="tm-header-top-val">${headerDisk}</div>
+                <div class="tm-header-bottom-label">Disk <span class="tm-sort-arrow">${sortCol === 'disk' ? (sortDesc ? '↓' : '↑') : ''}</span></div>
+              </div>
+              <div class="tm-header-cell col-metric ${sortCol === 'net' ? 'sorted' : ''}" data-sort="net">
+                <div class="tm-header-top-val">${headerNet}</div>
+                <div class="tm-header-bottom-label">Data used <span class="tm-sort-arrow">${sortCol === 'net' ? (sortDesc ? '↓' : '↑') : ''}</span></div>
+              </div>
+              <div class="tm-header-cell col-metric ${sortCol === 'gpu' ? 'sorted' : ''}" data-sort="gpu">
+                <div class="tm-header-top-val">${headerGpu}</div>
+                <div class="tm-header-bottom-label">GPU mem <span class="tm-sort-arrow">${sortCol === 'gpu' ? (sortDesc ? '↓' : '↑') : ''}</span></div>
+              </div>
+              <div class="tm-header-cell col-metric ${sortCol === 'power' ? 'sorted' : ''}" data-sort="power">
+                <div class="tm-header-top-val">${headerPower}</div>
+                <div class="tm-header-bottom-label">Power <span class="tm-sort-arrow">${sortCol === 'power' ? (sortDesc ? '↓' : '↑') : ''}</span></div>
+              </div>
+            </div>
+
+            <!-- Section 1: Apps -->
+            ${appsGroups.length ? `
+              <div class="tm-section-row" data-toggle-section="apps">
+                <span class="tm-section-chevron ${state.topAppsAppsExpanded !== false ? 'expanded' : ''}">›</span>
+                <span>Apps (${appsGroups.length})</span>
+              </div>
+              ${state.topAppsAppsExpanded !== false ? appsGroups.map(renderGroupRow).join('') : ''}
+            ` : ''}
+
+            <!-- Section 2: Background processes -->
+            ${bgGroups.length ? `
+              <div class="tm-section-row" data-toggle-section="bg">
+                <span class="tm-section-chevron ${state.topAppsBgExpanded ? 'expanded' : ''}">›</span>
+                <span>Background processes (${bgGroups.length})</span>
+              </div>
+              ${state.topAppsBgExpanded ? bgGroups.map(renderGroupRow).join('') : ''}
+            ` : ''}
+
+            ${(!appsGroups.length && !bgGroups.length) ? `
+              <div style="grid-column: 1 / -1; padding: 36px 0; text-align: center; color: #94a3b8;">
+                ${rawProcList.length ? 'No processes match the search query.' : 'No process data available from this device.'}
+              </div>
+            ` : ''}
+          </div>
+        </div>
+      </section>
+    `;
+
+    // 11 Subtab Views matching the Rust app
+    const views = {
+      overview: () => `
+        <div class="sensors-stat-grid">
+          ${renderBigStatCard({
+            iconCode: 'e186',
+            title: 'CPU',
+            heroVal: currentCpu.toFixed(1),
+            heroUnit: '%',
+            subtitle: `${s.cpu_cores || '—'} Cores · ${freqGhz} GHz · ${val(s.cpu_model)}`,
+            leftStat: `AVG ${avg(cpuHist).toFixed(0)}%`,
+            rightStat: `PEAK ${peak(cpuHist).toFixed(0)}%`,
+            data: cpuHist,
+            maxVal: 100,
+            dottedRatio: 0.12,
+            color: 'var(--accent)'
+          })}
+          ${renderBigStatCard({
+            iconCode: 'e085',
+            title: 'RAM',
+            heroVal: memUsage.toFixed(1),
+            heroUnit: '%',
+            subtitle: `${kb(usedMemoryKb)} / ${kb(s.mem_total_kb)}`,
+            leftStat: `AVG ${avg(ramHist).toFixed(0)}%`,
+            rightStat: `PEAK ${peak(ramHist).toFixed(0)}%`,
+            data: ramHist,
+            maxVal: 100,
+            dottedRatio: 0.85,
+            color: 'var(--accent)'
+          })}
+          ${renderBigStatCard({
+            iconCode: 'e145',
+            title: 'SWAP',
+            heroVal: swapUsage.toFixed(1),
+            heroUnit: '%',
