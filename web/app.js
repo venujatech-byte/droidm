@@ -2734,3 +2734,147 @@
             title: 'SWAP',
             heroVal: swapUsage.toFixed(1),
             heroUnit: '%',
+            subtitle: `${kb(usedSwapKb)} / ${kb(s.swap_total_kb)}`,
+            leftStat: `AVG ${avg(swapHist).toFixed(0)}%`,
+            rightStat: `PEAK ${peak(swapHist).toFixed(0)}%`,
+            data: swapHist,
+            maxVal: 100,
+            dottedRatio: 0.10,
+            color: 'var(--accent)'
+          })}
+          ${renderBigStatCard({
+            iconCode: 'e0c5',
+            title: 'STORAGE',
+            heroVal: storageUsage.toFixed(1),
+            heroUnit: '%',
+            subtitle: `${usedStorageGb.toFixed(1)} GB / ${totalStorageGb.toFixed(1)} GB`,
+            leftStat: `FREE ${freeStorageGb.toFixed(1)} GB`,
+            rightStat: `PEAK ${storageUsage.toFixed(0)}%`,
+            data: storageHist,
+            maxVal: 100,
+            dottedRatio: 0.65,
+            color: 'var(--accent)'
+          })}
+        </div>
+
+        <div class="sensors-overview-split">
+          <section class="card overall-speed-card">
+            <div class="speed-head-row">
+              <div>
+                <div class="stat-card-title">OVERALL SPEED</div>
+                <div class="subtle" style="margin-top:4px">Interface total · peak ${formatRate(netPeakRate)}</div>
+              </div>
+              <div class="speed-rates-pill">
+                <span class="speed-rate-item down"><span class="rate-arrow">↓</span> Down <b>${formatRate(currRxRate)}</b></span>
+                <span class="speed-rate-item up"><span class="rate-arrow">↑</span> Up <b>${formatRate(currTxRate)}</b></span>
+              </div>
+            </div>
+            <div class="speed-chart-box">
+              ${renderDualNetworkSvg(txHist, rxHist, netPeakRate, 'var(--accent)')}
+            </div>
+            <div class="speed-footer-stats">
+              <div class="speed-footer-stat-col">
+                <small>SENT</small>
+                <strong>${formatBytes(totTx)}</strong>
+                <span>↑ ${formatRate(currTxRate)} live</span>
+              </div>
+              <div class="speed-footer-stat-col">
+                <small>RECEIVED</small>
+                <strong>${formatBytes(totRx)}</strong>
+                <span>↓ ${formatRate(currRxRate)} live</span>
+              </div>
+              <div class="speed-footer-stat-col">
+                <small>AVG OVER WINDOW</small>
+                <span>↑ ${formatRate(avgTxRate)}</span>
+                <span>↓ ${formatRate(avgRxRate)}</span>
+              </div>
+            </div>
+          </section>
+
+          <section class="card conn-stats-card">
+            <div class="stat-card-title">CONNECTION STATS</div>
+            <div class="conn-stats-hero">
+              <strong>${socketTotal}</strong>
+              <span>open sockets</span>
+            </div>
+            <div class="chart-legend" style="margin-bottom:8px">
+              <span class="chart-legend-item"><i style="background:var(--accent)"></i>TCP ${socketTcp}</span>
+              <span class="chart-legend-item"><i style="background:#94a3b8"></i>UDP ${socketUdp}</span>
+            </div>
+            <div class="speed-chart-box">
+              ${renderSocketsChartSvg(tcpHist, udpHist, 'var(--accent)')}
+            </div>
+            <div class="conn-interface-chips">
+              ${network.slice(0, 3).map(iface => `
+                <div class="conn-iface-item">
+                  <b>${escapeHtml(iface.name)}</b>
+                  <span>↓ ${formatBytes(iface.rx_bytes)} · ↑ ${formatBytes(iface.tx_bytes)}</span>
+                </div>
+              `).join('')}
+            </div>
+          </section>
+        </div>
+
+        <div class="grid two">
+          <section class="card">
+            <div class="card-head">
+              <h2>Connectivity & Radio</h2>
+              <span class="chip">HARDWARE</span>
+            </div>
+            <div class="kv">
+              <div><small>Wi-Fi Radio</small><b>${onOff(s.wifi_enabled)}</b></div>
+              <div><small>Bluetooth Radio</small><b>${onOff(s.bluetooth_enabled)}</b></div>
+              <div><small>Active Interfaces</small><b>${network.length}</b></div>
+              <div><small>Total Transferred</small><b>${formatBytes(network.reduce((acc, iface) => acc + (Number(iface.rx_bytes) || 0) + (Number(iface.tx_bytes) || 0), 0))}</b></div>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="card-head">
+              <h2>Thermals & Hardware</h2>
+              <span class="chip">SENSORS</span>
+            </div>
+            <div class="kv">
+              <div><small>Thermal Zones</small><b>${temps.length || 'Unavailable'}</b></div>
+              <div><small>Registered Sensors</small><b>${sensors.length || 'Unavailable'}</b></div>
+              <div><small>Battery Temperature</small><b>${val(s.battery_temp_c, ' °C', 1)}</b></div>
+              <div><small>Graphics Renderer</small><b>${escapeHtml(val(s.gpu_renderer))}</b></div>
+            </div>
+          </section>
+        </div>
+      `,
+
+      'top-apps': topAppsTable,
+
+      cpu: () => `
+        <section class="card sensor-cpu-head">
+          <div class="card-head">
+            <div>
+              <h2>${escapeHtml(val(s.cpu_model))}</h2>
+              <div class="subtle mono">${s.cpu_cores || '—'} cores · ${freqGhz} GHz · ${escapeHtml(val(t.cpu_abi))}</div>
+            </div>
+            <span class="chip">ANDROID LIVE</span>
+          </div>
+        </section>
+
+        <div class="sensors-stat-grid">
+          ${renderBigStatCard({
+            iconCode: 'e181',
+            title: 'CPU LOAD',
+            heroVal: currentCpu.toFixed(1),
+            heroUnit: '%',
+            subtitle: `${s.cpu_cores || '—'} cores active`,
+            leftStat: `AVG ${avg(cpuHist).toFixed(0)}%`,
+            rightStat: `PEAK ${peak(cpuHist).toFixed(0)}%`,
+            data: cpuHist,
+            maxVal: 100,
+            dottedRatio: 0.12,
+            color: 'var(--accent)'
+          })}
+          ${renderBigStatCard({
+            iconCode: 'e186',
+            title: 'FREQUENCY',
+            heroVal: freqGhz,
+            heroUnit: 'GHz',
+            subtitle: `Min ${minFreqMhz} GHz`,
+            leftStat: 'SCALING',
