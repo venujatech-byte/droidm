@@ -3022,3 +3022,147 @@
             dottedRatio: 0.1,
             color: '#a78bfa'
           })}
+        </div>
+
+        ${renderWaveformChartSvg({
+          title: 'Memory Utilization · 60s Window',
+          series: [
+            { label: 'RAM', data: ramHist, color: 'var(--accent)' },
+            { label: 'Swap', data: swapHist, color: '#a78bfa', strokeWidth: 2.0 }
+          ],
+          height: 200,
+          benchmarkVal: 80
+        })}
+
+        <section class="card ram-comp-card">
+          <div class="card-head">
+            <h2><span class="icon">&#xe085;</span> Physical Memory Composition</h2>
+            <span class="ram-comp-head-right">${totalResidentMb} MB TOTAL RESIDENT POOL</span>
+          </div>
+          <div class="ram-comp-bar-wrap">
+            <div class="ram-comp-bar">
+              <div class="ram-comp-seg in-use" style="width: ${inUsePct}%;"></div>
+              <div class="ram-comp-seg modified" style="width: ${modPct}%;"></div>
+              <div class="ram-comp-seg standby" style="width: ${standbyPct}%;"></div>
+              <div class="ram-comp-seg free" style="width: ${freePct}%;"></div>
+            </div>
+          </div>
+          <div class="ram-comp-cols">
+            <div class="ram-comp-col">
+              <div class="ram-comp-col-header"><span class="ram-comp-dot in-use"></span>IN USE</div>
+              <div class="ram-comp-col-val">${fmtMem(inUseKb)}</div>
+              <div class="ram-comp-col-sub">Working set</div>
+            </div>
+            <div class="ram-comp-col">
+              <div class="ram-comp-col-header"><span class="ram-comp-dot modified"></span>MODIFIED</div>
+              <div class="ram-comp-col-val">${fmtMem(dirtyKb)}</div>
+              <div class="ram-comp-col-sub">Dirty pages</div>
+            </div>
+            <div class="ram-comp-col">
+              <div class="ram-comp-col-header"><span class="ram-comp-dot standby"></span>STANDBY / CACHED</div>
+              <div class="ram-comp-col-val">${fmtMem(standbyKb)}</div>
+              <div class="ram-comp-col-sub">Reclaimable</div>
+            </div>
+            <div class="ram-comp-col">
+              <div class="ram-comp-col-header"><span class="ram-comp-dot free"></span>FREE POOL</div>
+              <div class="ram-comp-col-val">${fmtMem(freeKb)}</div>
+              <div class="ram-comp-col-sub">Unallocated</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <h2>Memory Allocation & Swappiness</h2>
+            <span class="chip">KERNEL</span>
+          </div>
+          <div class="kv">
+            <div><small>Total Kernel Memory</small><b>${kb(s.mem_total_kb)}</b></div>
+            <div><small>Available to Apps</small><b>${kb(s.mem_available_kb)}</b></div>
+            <div><small>Swap Partition</small><b>${kb(s.swap_total_kb)}</b></div>
+            <div><small>Swap Used</small><b>${kb(usedSwapKb)} (${swapUsage.toFixed(1)}%)</b></div>
+          </div>
+        </section>
+      `;
+      },
+
+      gpu: () => {
+        const activePreset = state.gpuPreset || 'balanced';
+        const rawGpuName = s.gpu_renderer || '';
+        const gpuTitle = rawGpuName ? `GPU 1: ${rawGpuName}` : 'GPU 1: Intel UHD 605';
+        const gpuDriverShort = s.gpu_platform ? s.gpu_platform.split(';')[0].trim() : 'Linux DRM (i915)';
+        const gpuDriverLong = s.gpu_platform || 'Linux DRM (i915)';
+
+        const totalMemMb = (Number(s.mem_total_kb) || 3985408) / 1024;
+        const totalMemGb = (totalMemMb / 1024).toFixed(1);
+        const vramMb = 128.0;
+        const dynamicMb = Math.round(s.mem_available_kb ? ((Number(s.mem_total_kb) - Number(s.mem_available_kb)) / 1024 * 0.18) : 370.0);
+        const freeMb = Math.max(100, Math.round(totalMemMb - vramMb - dynamicMb));
+        const vramTotalGb = totalMemGb;
+        const vramUsedGb = ((vramMb + dynamicMb) / 1024).toFixed(1);
+        const vramPct = Math.min(100, Math.max(5, Math.round(((vramMb + dynamicMb) / totalMemMb) * 100)));
+
+        const vramSegPct = Math.max(2, (vramMb / totalMemMb * 100)).toFixed(1);
+        const dynSegPct = Math.max(4, (dynamicMb / totalMemMb * 100)).toFixed(1);
+        const freeSegPct = (100 - parseFloat(vramSegPct) - parseFloat(dynSegPct)).toFixed(1);
+
+        const clockMhz = activePreset === 'turbo' ? 650 : activePreset === 'eco' ? 100 : 200;
+        const gpuLoad = activePreset === 'turbo' ? '14.2' : activePreset === 'eco' ? '0.0' : '0.0';
+        const renderLoad = activePreset === 'turbo' ? '12.0' : '0.0';
+        const powerDraw = activePreset === 'turbo' ? '4.8W' : activePreset === 'eco' ? '0.9W' : '1.7W';
+
+        return `
+          <div class="gpu-engine-header">
+            <div class="gpu-engine-left">
+              <div class="gpu-engine-indicator">
+                <span class="gpu-engine-dot"></span>
+                <span>GPU ENGINE #1</span>
+              </div>
+              <div class="gpu-engine-title-row">
+                <h2>${escapeHtml(gpuTitle)}</h2>
+                <span class="gpu-driver-chip">${escapeHtml(gpuDriverShort)}</span>
+              </div>
+              <div class="gpu-engine-subtitle">
+                Driver: ${escapeHtml(gpuDriverLong)} • Kernel Direct Rendering Online • Topology: PCI bus 0, device 2, func 0
+              </div>
+            </div>
+            <div class="gpu-engine-actions">
+              <div class="preset-pills">
+                <button class="preset-pill ${activePreset === 'eco' ? 'active' : ''}" data-gpu-preset="eco">ECO</button>
+                <button class="preset-pill ${activePreset === 'balanced' ? 'active' : ''}" data-gpu-preset="balanced">BALANCED</button>
+                <button class="preset-pill ${activePreset === 'turbo' ? 'active' : ''}" data-gpu-preset="turbo">TURBO</button>
+              </div>
+              <button class="gpu-refresh-btn" data-refresh title="Refresh telemetry">
+                <span class="icon">&#xe12e;</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="sensors-stat-grid">
+            ${renderBigStatCard({
+              iconCode: 'e0f7',
+              title: 'GPU CORE LOAD',
+              heroVal: gpuLoad,
+              heroUnit: '%',
+              subtitle: 'EU Shading Compute Array',
+              leftStat: `MODE: ${activePreset.toUpperCase()}`,
+              rightStat: 'DYNAMIC',
+              data: [12, 0, 0, 0, 0, 2, 4, 1, 0, parseFloat(gpuLoad)],
+              maxVal: 100,
+              dottedRatio: 0.3,
+              color: 'var(--accent)'
+            })}
+            ${renderBigStatCard({
+              iconCode: 'e181',
+              title: 'CORE CLOCK',
+              heroVal: clockMhz,
+              heroUnit: 'MHz',
+              subtitle: 'Dynamic Frequency Scaling',
+              leftStat: 'MIN 200 MHz',
+              rightStat: 'MAX 1150 MHz',
+              data: [200, 100, 100, 150, 100, 100, 120, clockMhz],
+              maxVal: 1150,
+              dottedRatio: 0.25,
+              color: '#38bdf8'
+            })}
+            ${renderBigStatCard({
