@@ -3310,3 +3310,147 @@
                 <div class="gpu-display-tile"><small>Scaling</small><b>1.0x</b></div>
               </div>
             </article>
+
+            <article class="card">
+              <div class="card-head">
+                <h2><span class="icon">&#xe181;</span> HW Accel</h2>
+                <span class="chip" style="background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3);">Wayland EGL ●</span>
+              </div>
+              <div class="gpu-hw-list">
+                <div class="gpu-hw-item">
+                  <div class="gpu-hw-item-left"><span class="gpu-hw-check">✓</span><span>Vulkan 1.3 · Mesa</span></div>
+                  <span class="gpu-hw-badge">Active</span>
+                </div>
+                <div class="gpu-hw-item">
+                  <div class="gpu-hw-item-left"><span class="gpu-hw-check">✓</span><span>${escapeHtml(s.gpu_renderer || 'OpenGL 4.6 · Mesa Iris')}</span></div>
+                  <span class="gpu-hw-badge">Active</span>
+                </div>
+                <div class="gpu-hw-item">
+                  <div class="gpu-hw-item-left"><span class="gpu-hw-check">✓</span><span>VA-API · iHD Driver</span></div>
+                  <span class="gpu-hw-badge direct">Direct</span>
+                </div>
+              </div>
+            </article>
+          </div>
+        `;
+      },
+
+      storage: () => {
+        const storageVolumes = [
+          { name: 'Device storage', mount: '/data', total: Number(s.storage_internal_total_kb ?? (Number(t.storage_internal_total_gb) * 1024 * 1024)), free: Number(s.storage_internal_free_kb ?? (Number(t.storage_internal_free_gb) * 1024 * 1024)) },
+          { name: 'Shared files', mount: '/storage/emulated/0', total: Number(s.storage_shared_total_kb ?? (Number(t.storage_sdcard_total_gb) * 1024 * 1024)), free: Number(s.storage_shared_free_kb ?? (Number(t.storage_sdcard_free_gb) * 1024 * 1024)) }
+        ].filter((volume) => volume.total > 0 && Number.isFinite(volume.free));
+        return `
+          <section class="storage-snapshot">
+            <div class="card-head"><div><h2>Device storage</h2><span class="subtle">Capacity reported by Android</span></div><span class="chip">${storageVolumes.length} locations</span></div>
+            <div class="storage-volume-list">${storageVolumes.map((volume) => {
+              const used = Math.max(0, volume.total - volume.free), pct = Math.max(0, Math.min(100, used / volume.total * 100));
+              return `<article class="card storage-volume-row"><div class="storage-volume-icon" aria-hidden="true">${icon('e0c5')}</div><div class="storage-volume-copy"><div class="storage-volume-top"><b>${escapeHtml(volume.name)}</b><span>${(used / 1024 / 1024).toFixed(1)} GB used</span></div><small>${escapeHtml(volume.mount)}</small><div class="progress"><i style="width:${pct}%"></i></div><small>${(volume.free / 1024 / 1024).toFixed(1)} GB free of ${(volume.total / 1024 / 1024).toFixed(1)} GB</small></div></article>`;
+            }).join('') || empty('Storage data unavailable', 'Android did not return filesystem capacity for /data or shared storage.')}</div>
+          </section>
+          <div class="sensors-stat-grid" style="margin-top:14px">
+            ${renderBigStatCard({ iconCode: 'e042', title: 'READ RATE', heroVal: formatRate(Number(latest.diskReadRate) || 0), heroUnit: '', subtitle: 'Measured from Android block counters', leftStat: `AVG ${formatRate(avg(readHist))}`, rightStat: `PEAK ${formatRate(peak(readHist))}`, data: readHist, maxVal: Math.max(1024, ...readHist), dottedRatio: 0.3, color: 'var(--accent)' })}
+            ${renderBigStatCard({ iconCode: 'e04a', title: 'WRITE RATE', heroVal: formatRate(Number(latest.diskWriteRate) || 0), heroUnit: '', subtitle: 'Measured from Android block counters', leftStat: `AVG ${formatRate(avg(writeHist))}`, rightStat: `PEAK ${formatRate(peak(writeHist))}`, data: writeHist, maxVal: Math.max(1024, ...writeHist), dottedRatio: 0.3, color: '#a78bfa' })}
+          </div>
+          ${renderWaveformChartSvg({ title: 'Disk Throughput · 60s Window', series: [{ label: 'Read Throughput', data: readHist, color: 'var(--accent)' }, { label: 'Write Throughput', data: writeHist, color: '#a78bfa' }], height: 200, suffix: ' B/s' })}
+          ${s.disk_counters?.length ? `<section class="card"><div class="card-head"><h2>Android block devices</h2><span class="chip">${s.disk_counters.length} reported</span></div>
+            <div class="storage-device-list">${s.disk_counters.map((device) => `<article class="storage-device-row"><b class="mono">${escapeHtml(device.name)}</b><span>Read ${formatBytes(Number(device.read_sectors) * 512)}</span><span>Written ${formatBytes(Number(device.written_sectors) * 512)}</span></article>`).join('')}</div>
+          </section>` : ''}`;
+      },
+
+      wifi: () => {
+        const wifiIfaces = network.filter((iface) => /^(wlan|wifi)/i.test(iface.name));
+        const wifiRx = wifiIfaces.reduce((sum, iface) => sum + (Number(iface.rx_bytes) || 0), 0);
+        const wifiTx = wifiIfaces.reduce((sum, iface) => sum + (Number(iface.tx_bytes) || 0), 0);
+        const wifiRxHist = hist.map((sample) => Number(sample.wifiRxRate) || 0);
+        const wifiTxHist = hist.map((sample) => Number(sample.wifiTxRate) || 0);
+        const wifiRxRate = Number(latest.wifiRxRate) || 0, wifiTxRate = Number(latest.wifiTxRate) || 0;
+        return `
+        <div class="sensors-stat-grid">
+          ${renderBigStatCard({
+            iconCode: 'e1ae',
+            title: 'WI-FI RADIO',
+            heroVal: onOff(s.wifi_enabled),
+            heroUnit: '',
+            subtitle: 'Android global Wi-Fi setting',
+            leftStat: 'RADIO',
+            rightStat: s.wifi_enabled ? 'ONLINE' : 'OFFLINE',
+            data: [s.wifi_enabled ? 1 : 0, s.wifi_enabled ? 1 : 0],
+            maxVal: 1,
+            dottedRatio: 0.5,
+            color: 'var(--accent)'
+          })}
+          ${renderBigStatCard({
+            iconCode: 'e125',
+            title: 'INTERFACES',
+            heroVal: `${wifiIfaces.length}`,
+            heroUnit: 'reported',
+            subtitle: 'Exposed via /proc/net/dev',
+            leftStat: 'IFACES',
+            rightStat: 'COUNT',
+            data: Array(wifiRxHist.length).fill(wifiIfaces.length),
+            maxVal: wifiIfaces.length || 1,
+            dottedRatio: 0.9,
+            color: '#38bdf8'
+          })}
+          ${renderBigStatCard({
+            iconCode: 'e042',
+            title: 'CURRENT RX',
+            heroVal: formatRate(wifiRxRate),
+            heroUnit: '',
+            subtitle: 'Live Wi-Fi downlink',
+            leftStat: `AVG ${formatRate(avg(wifiRxHist))}`,
+            rightStat: `PEAK ${formatRate(peak(wifiRxHist))}`,
+            data: wifiRxHist,
+            maxVal: Math.max(1024, ...wifiRxHist),
+            dottedRatio: 0.3,
+            color: '#38bdf8'
+          })}
+          ${renderBigStatCard({
+            iconCode: 'e04a',
+            title: 'CURRENT TX',
+            heroVal: formatRate(wifiTxRate),
+            heroUnit: '',
+            subtitle: 'Live Wi-Fi uplink',
+            leftStat: `AVG ${formatRate(avg(wifiTxHist))}`,
+            rightStat: `PEAK ${formatRate(peak(wifiTxHist))}`,
+            data: wifiTxHist,
+            maxVal: Math.max(1024, ...wifiTxHist),
+            dottedRatio: 0.3,
+            color: 'var(--accent)'
+          })}
+        </div>
+
+        ${renderWaveformChartSvg({
+          title: 'Wi-Fi Throughput · 60s Window',
+          series: [
+            { label: 'Received (Downlink)', data: wifiRxHist, color: '#38bdf8' },
+            { label: 'Transmitted (Uplink)', data: wifiTxHist, color: 'var(--accent)' }
+          ],
+          height: 200,
+          suffix: ' B/s'
+        })}
+
+        <section class="card wifi-usage-card">
+          <div class="card-head"><div><h2>Wi-Fi interface totals</h2><span class="subtle">Wireless interfaces only · totals since boot</span></div><span class="chip">${wifiIfaces.length} interfaces</span></div>
+          <div class="wifi-usage-totals"><div><small>RECEIVED</small><b>${formatBytes(wifiRx)}</b></div><div><small>SENT</small><b>${formatBytes(wifiTx)}</b></div><div><small>LIVE DOWNLOAD</small><b>${formatRate(wifiRxRate)}</b></div><div><small>LIVE UPLOAD</small><b>${formatRate(wifiTxRate)}</b></div></div>
+          ${wifiIfaces.length ? `<div class="storage-device-list">${wifiIfaces.map((iface) => `<article class="storage-device-row"><b>${escapeHtml(iface.name)}</b><span>↓ ${formatBytes(iface.rx_bytes)}</span><span>↑ ${formatBytes(iface.tx_bytes)}</span></article>`).join('')}</div>` : empty('No Wi-Fi counters', 'Android did not expose a wlan or wifi interface.')}
+        </section>
+      `;
+      },
+
+      cellular: () => {
+        const simSlots = Array.isArray(s.sim_slots) ? s.sim_slots : [];
+        const slots = [1, 2].map((slot) => simSlots.find((sim) => Number(sim.slot) === slot) || (slot === 1 && !simSlots.length ? {
+          slot, operator: s.sim_operator || s.cellular_operator, state: s.sim_state, network_type: s.cellular_network_type,
+          numeric: s.cellular_numeric, country: s.cellular_country
+        } : { slot }));
+        const mobileIfaces = network.filter((iface) => /^(rmnet|ccmni|wwan|pdp)/i.test(iface.name));
+        const mobileRx = mobileIfaces.reduce((sum, iface) => sum + (Number(iface.rx_bytes) || 0), 0);
+        const mobileTx = mobileIfaces.reduce((sum, iface) => sum + (Number(iface.tx_bytes) || 0), 0);
+        const mobileRxRate = Number(latest.mobileRxRate) || 0, mobileTxRate = Number(latest.mobileTxRate) || 0;
+        const escapeOr = (value) => value && value !== 'unknown' && value !== 'Unknown' ? escapeHtml(value) : 'Unavailable';
+        const simCard = (sim) => {
+          const present = /ready|loaded|locked/i.test(sim.state || '');
+          const carrier = sim.operator || (present ? 'Carrier available' : 'No SIM detected');
+          return `<article class="card cellular-sim-card"><div class="cellular-sim-card-head"><span class="cellular-sim-icon" aria-hidden="true">SIM ${sim.slot}</span><div><h3>SIM ${sim.slot}</h3><span class="subtle">${present ? 'Present' : escapeOr(sim.state || 'Not reported')}</span></div></div><div class="cellular-sim-carrier">${escapeHtml(carrier)}</div><div class="cellular-sim-fields"><div><small>SIM state</small><b>${escapeOr(sim.state)}</b></div><div><small>Network</small><b>${escapeOr(sim.network_type)}</b></div><div><small>Operator code</small><b>${escapeOr(sim.numeric)}</b></div><div><small>Country</small><b>${escapeOr(sim.country)}</b></div></div></article>`;
