@@ -3166,3 +3166,147 @@
               color: '#38bdf8'
             })}
             ${renderBigStatCard({
+              iconCode: 'e0f7',
+              title: '3D RENDER ENGINE',
+              heroVal: renderLoad,
+              heroUnit: '%',
+              subtitle: 'Direct3D & Vulkan Pipeline',
+              leftStat: 'ACTIVE ENGINE',
+              rightStat: '60 FPS',
+              data: [0, 0, 0, 0, 0, 1, 0, 0, parseFloat(renderLoad)],
+              maxVal: 100,
+              dottedRatio: 0.1,
+              color: '#38bdf8'
+            })}
+            ${renderBigStatCard({
+              iconCode: 'e085',
+              title: 'SHARED VRAM',
+              heroVal: `${vramUsedGb} / ${vramTotalGb}`,
+              heroUnit: 'GB',
+              subtitle: 'Dynamic Unified Memory Pool',
+              leftStat: `UTILIZATION ${vramPct}%`,
+              rightStat: `POWER ${powerDraw}`,
+              data: [0.3, 0.3, 0.3, 0.3, 0.3, parseFloat(vramUsedGb)],
+              maxVal: parseFloat(vramTotalGb) || 4,
+              dottedRatio: 0.1,
+              color: '#38bdf8'
+            })}
+          </div>
+
+          <section class="card gpu-trace-section">
+            <div class="card-head">
+              <h2><span class="icon">&#xe186;</span> ENGINE UTILIZATION TRACE (60S WINDOW)</h2>
+            </div>
+            <div class="gpu-trace-grid">
+              <div class="gpu-trace-box">
+                <div class="gpu-trace-top">
+                  <div class="gpu-trace-info">
+                    <h4>3D Engine / Render</h4>
+                    <small>Direct3D 12 • Vulkan 1.3 • oneAPI</small>
+                  </div>
+                  <div class="gpu-trace-val-wrap">
+                    <div class="gpu-trace-val">0.0 <small>%</small></div>
+                    <div class="gpu-trace-peak">Peak: 18.4%</div>
+                  </div>
+                </div>
+                <div class="gpu-trace-spark-wrap">
+                  ${renderSparklineSvg([0, 0, 0, 0, 0, 2, 8, 18, 12, 4, 1, 0], 25, null, '#38bdf8')}
+                </div>
+              </div>
+
+              <div class="gpu-trace-box">
+                <div class="gpu-trace-top">
+                  <div class="gpu-trace-info">
+                    <h4>Copy Engine (Blitter)</h4>
+                    <small>Direct Memory Access Transfer Engine</small>
+                  </div>
+                  <div class="gpu-trace-val-wrap">
+                    <div class="gpu-trace-val">0.0 <small>%</small></div>
+                    <div class="gpu-trace-peak">Peak: 6.2%</div>
+                  </div>
+                </div>
+                <div class="gpu-trace-spark-wrap">
+                  ${renderSparklineSvg([0, 0, 0, 1, 3, 6, 4, 2, 1, 0, 0, 0], 25, null, '#38bdf8')}
+                </div>
+              </div>
+
+              <div class="gpu-trace-box">
+                <div class="gpu-trace-top">
+                  <div class="gpu-trace-info">
+                    <h4>Video Decode (Hardware VPU)</h4>
+                    <small>H.264 • HEVC 10-bit • VP9 Profile 2</small>
+                  </div>
+                  <div class="gpu-trace-val-wrap">
+                    <div class="gpu-trace-val">0.0 <small>%</small></div>
+                  </div>
+                </div>
+                <div class="gpu-trace-spark-wrap">
+                  ${renderSparklineSvg([0, 0, 0, 0, 0, 0, 0, 0], 25, 0.5, '#38bdf8')}
+                </div>
+              </div>
+
+              <div class="gpu-trace-box">
+                <div class="gpu-trace-top">
+                  <div class="gpu-trace-info">
+                    <h4>Video Processing</h4>
+                    <small>Color Correction • Deinterlacing • Scaling</small>
+                  </div>
+                  <div class="gpu-trace-val-wrap">
+                    <div class="gpu-trace-val">0.8 <small>%</small></div>
+                  </div>
+                </div>
+                <div class="gpu-trace-spark-wrap">
+                  ${renderSparklineSvg([0.2, 0.4, 0.8, 0.8, 0.6, 0.8, 0.8, 0.8], 10, null, '#38bdf8')}
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="card gpu-mem-card">
+            <div class="card-head">
+              <h2><span class="icon">&#xe085;</span> Memory Subsystem Breakdown</h2>
+              <div class="gpu-mem-legend-chips">
+                <span><span class="gpu-mem-chip-dot vram"></span>VRAM: ${vramMb.toFixed(0)} MB</span>
+                <span><span class="gpu-mem-chip-dot dynamic"></span>Dynamic: ${dynamicMb} MB</span>
+                <span><span class="gpu-mem-chip-dot free"></span>Free: ${freeMb} MB</span>
+              </div>
+            </div>
+            <div class="gpu-mem-bar-wrap">
+              <div class="gpu-mem-bar">
+                <div class="gpu-mem-seg vram" style="width: ${vramSegPct}%;"></div>
+                <div class="gpu-mem-seg dynamic" style="width: ${dynSegPct}%;"></div>
+                <div class="gpu-mem-seg free" style="width: ${freeSegPct}%;"></div>
+              </div>
+            </div>
+            <div class="gpu-mem-cols">
+              <div class="gpu-mem-col">
+                <div class="gpu-mem-col-header"><span class="gpu-mem-chip-dot vram"></span>DEDICATED VIDEO</div>
+                <div class="gpu-mem-col-val">${vramMb.toFixed(1)} MB</div>
+                <div class="gpu-mem-col-sub">BIOS Allocated</div>
+              </div>
+              <div class="gpu-mem-col">
+                <div class="gpu-mem-col-header"><span class="gpu-mem-chip-dot dynamic"></span>SHARED MEMORY</div>
+                <div class="gpu-mem-col-val">${dynamicMb.toFixed(1)} MB / ${vramTotalGb} GB</div>
+                <div class="gpu-mem-col-sub">OS Managed</div>
+              </div>
+              <div class="gpu-mem-col">
+                <div class="gpu-mem-col-header"><span class="gpu-mem-chip-dot free"></span>BANDWIDTH</div>
+                <div class="gpu-mem-col-val">19.2 GB/s</div>
+                <div class="gpu-mem-col-sub">SINGLE-CHANNEL</div>
+              </div>
+            </div>
+          </section>
+
+          <div class="grid two" style="margin-top: 14px;">
+            <article class="card">
+              <div class="card-head">
+                <h2><span class="icon">&#xe0c8;</span> Display (eDP)</h2>
+                <span class="chip" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3);">Active (eDP-1) ●</span>
+              </div>
+              <div class="gpu-display-hero">${escapeHtml(t.screen_res || '1366 × 768')}</div>
+              <div class="gpu-display-sub">@ 60 Hz · ${t.screen_dpi ? `${t.screen_dpi} DPI` : '6-bit RGB'}</div>
+              <div class="gpu-display-tiles">
+                <div class="gpu-display-tile"><small>Color Space</small><b>sRGB</b></div>
+                <div class="gpu-display-tile"><small>Scaling</small><b>1.0x</b></div>
+              </div>
+            </article>
