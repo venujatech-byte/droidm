@@ -3454,3 +3454,147 @@
           const present = /ready|loaded|locked/i.test(sim.state || '');
           const carrier = sim.operator || (present ? 'Carrier available' : 'No SIM detected');
           return `<article class="card cellular-sim-card"><div class="cellular-sim-card-head"><span class="cellular-sim-icon" aria-hidden="true">SIM ${sim.slot}</span><div><h3>SIM ${sim.slot}</h3><span class="subtle">${present ? 'Present' : escapeOr(sim.state || 'Not reported')}</span></div></div><div class="cellular-sim-carrier">${escapeHtml(carrier)}</div><div class="cellular-sim-fields"><div><small>SIM state</small><b>${escapeOr(sim.state)}</b></div><div><small>Network</small><b>${escapeOr(sim.network_type)}</b></div><div><small>Operator code</small><b>${escapeOr(sim.numeric)}</b></div><div><small>Country</small><b>${escapeOr(sim.country)}</b></div></div></article>`;
+        };
+        return `<section class="cellular-header"><div><span class="cellular-indicator"><i class="cellular-indicator-dot ${s.mobile_data_enabled ? '' : 'standby'}"></i> CELLULAR NETWORK</span><h2>${escapeOr(s.cellular_operator || 'Mobile network')}</h2><span class="subtle">${escapeOr(s.cellular_network_type)} · ${s.mobile_data_enabled == null ? 'Data status unavailable' : s.mobile_data_enabled ? 'Mobile data on' : 'Mobile data off'}</span></div><button class="button" data-refresh>${icon('e145')} Refresh</button></section>
+          <section class="cellular-traffic-grid">
+            <article class="card cellular-traffic-card"><div class="stat-card-title"><span aria-hidden="true">↓</span> MOBILE DOWNLOAD</div><strong>${formatRate(mobileRxRate)}</strong><span>Live receive speed</span><small>${formatBytes(mobileRx)} received since boot</small><div class="cellular-mini-chart">${renderSparklineSvg(hist.map((sample) => sample.mobileRxRate || 0), Math.max(1024, ...hist.map((sample) => sample.mobileRxRate || 0)), null, '#38bdf8')}</div></article>
+            <article class="card cellular-traffic-card"><div class="stat-card-title"><span aria-hidden="true">↑</span> MOBILE UPLOAD</div><strong>${formatRate(mobileTxRate)}</strong><span>Live transmit speed</span><small>${formatBytes(mobileTx)} sent since boot</small><div class="cellular-mini-chart">${renderSparklineSvg(hist.map((sample) => sample.mobileTxRate || 0), Math.max(1024, ...hist.map((sample) => sample.mobileTxRate || 0)), null, 'var(--accent)')}</div></article>
+          </section>
+          <section class="cellular-sim-grid">${slots.map(simCard).join('')}</section>
+          <section class="card cellular-interface-card"><div class="card-head"><div><h3>Mobile data interfaces</h3><span class="subtle">Cellular counters only · Wi-Fi is excluded</span></div><span class="chip">${mobileIfaces.length} found</span></div>${mobileIfaces.length ? `<div class="storage-device-list">${mobileIfaces.map((iface) => `<article class="storage-device-row"><b>${escapeHtml(iface.name)}</b><span>↓ ${formatBytes(iface.rx_bytes)} · ${formatRate(mobileRxRate)}</span><span>↑ ${formatBytes(iface.tx_bytes)} · ${formatRate(mobileTxRate)}</span></article>`).join('')}</div>` : empty('No mobile data counters', 'Android did not expose a cellular interface counter. Wi-Fi traffic is not included.')}</section>`;
+      },
+
+      'data-usage': () => `
+        <div class="toolbar" role="group" aria-label="Data usage network">
+          <button class="button ${usageType === 'wifi' ? 'tonal' : ''}" data-data-network="wifi" aria-pressed="${usageType === 'wifi'}">Wi-Fi</button>
+          <button class="button ${usageType === 'mobile' ? 'tonal' : ''}" data-data-network="mobile" aria-pressed="${usageType === 'mobile'}">Mobile data</button>
+        </div>
+        <div class="sensors-stat-grid">
+          ${renderBigStatCard({
+            iconCode: 'e125',
+            title: 'TOTAL TRANSFERRED',
+            heroVal: formatBytes(usageRx + usageTx),
+            heroUnit: '',
+            subtitle: `${usageType === 'wifi' ? 'Wi-Fi' : 'Mobile data'} interfaces`,
+            leftStat: 'RX + TX',
+            rightStat: 'TOTAL',
+            data: usageHistory.map(h => h.rxRate + h.txRate),
+            maxVal: Math.max(1024, ...usageHistory.map(h => h.rxRate + h.txRate)),
+            dottedRatio: 0.5,
+            color: 'var(--accent)'
+          })}
+          ${renderBigStatCard({
+            iconCode: 'e042',
+            title: 'TOTAL RECEIVED',
+            heroVal: formatBytes(usageRx),
+            heroUnit: '',
+            subtitle: `Cumulative downlink · ${formatRate(usageRxRate)} now`,
+            leftStat: 'RECEIVED',
+            rightStat: usageType.toUpperCase(),
+            data: usageHistory.map(h => h.rxRate),
+            maxVal: Math.max(1024, ...usageHistory.map(h => h.rxRate)),
+            dottedRatio: 0.5,
+            color: '#38bdf8'
+          })}
+          ${renderBigStatCard({
+            iconCode: 'e04a',
+            title: 'TOTAL SENT',
+            heroVal: formatBytes(usageTx),
+            heroUnit: '',
+            subtitle: `Cumulative uplink · ${formatRate(usageTxRate)} now`,
+            leftStat: 'SENT',
+            rightStat: usageType.toUpperCase(),
+            data: usageHistory.map(h => h.txRate),
+            maxVal: Math.max(1024, ...usageHistory.map(h => h.txRate)),
+            dottedRatio: 0.5,
+            color: '#a78bfa'
+          })}
+          ${renderBigStatCard({
+            iconCode: 'e1ae',
+            title: 'ACTIVE INTERFACES',
+            heroVal: `${usageIfaces.length}`,
+            heroUnit: 'ifaces',
+            subtitle: 'Reported by Linux kernel',
+            leftStat: 'KERNEL',
+            rightStat: 'NETWORKS',
+            data: Array(hist.length).fill(usageIfaces.length),
+            maxVal: usageIfaces.length || 1,
+            dottedRatio: 0.9,
+            color: 'var(--accent)'
+          })}
+        </div>
+
+        ${renderWaveformChartSvg({
+          title: `${usageType === 'wifi' ? 'Wi-Fi' : 'Mobile data'} Traffic · 60s Trend`,
+          series: [
+            { label: 'Download speed', data: usageHistory.map(h => h.rxRate), color: '#38bdf8' },
+            { label: 'Upload speed', data: usageHistory.map(h => h.txRate), color: 'var(--accent)' }
+          ],
+          height: 200,
+          suffix: ' B/s'
+        })}
+
+        <section class="card">
+          <div class="card-head">
+            <div>
+              <h2>Interface Data Counters</h2>
+              <div class="subtle">Cumulative bytes reported by Android kernel since device boot</div>
+            </div>
+          </div>
+          ${usageIfaces.length ? `
+            <div class="table-wrap">
+              <table class="table">
+                <thead><tr><th>Interface</th><th>Received</th><th>Transmitted</th><th>Total</th></tr></thead>
+                <tbody>
+                  ${usageIfaces.map(n => `
+                    <tr>
+                      <td class="mono"><b>${escapeHtml(n.name)}</b></td>
+                      <td>↓ ${formatBytes(n.rx_bytes)}</td>
+                      <td>↑ ${formatBytes(n.tx_bytes)}</td>
+                      <td><b>${formatBytes(Number(n.rx_bytes) + Number(n.tx_bytes))}</b></td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          ` : empty('No matching interface counters', `No ${usageType === 'wifi' ? 'Wi-Fi' : 'mobile data'} interface counters are exposed by the device.`)}
+        </section>
+      `,
+
+      power: () => {
+        const batPct = Number(s.battery_pct != null ? s.battery_pct : 100);
+        const acOnline = s.battery_plugged === 'AC' || s.battery_plugged === 'USB' || s.battery_plugged === 'Wireless' || s.battery_status === 'Full' || s.battery_status === 'Charging';
+        const isCharging = s.battery_status === 'Charging';
+        const isFull = s.battery_status === 'Full' || (acOnline && batPct >= 100);
+
+        // Voltage is always reported by dumpsys battery; only synthesize for the sparkline pad.
+        const hasVoltage = s.battery_voltage_mv != null;
+        const voltageMv = Number(s.battery_voltage_mv) || 0;
+        const voltageV = hasVoltage ? (voltageMv / 1000).toFixed(2) : null;
+        const voltageHist = hist.map(h => h.voltage ? (Number(h.voltage) / 1000) : Number(voltageV) || 0);
+        if (voltageHist.length < 2) voltageHist.push(Number(voltageV) || 0);
+
+        const healthText = s.battery_health === '2' ? 'Good' : (s.battery_health || 'Good');
+
+        // Capacity sources, best first: fuel-gauge uevent (root only), then the
+        // platform's learned design capacity, then an estimate flagged as such.
+        const learnedMah = Number(s.battery_design_capacity_mah) || 0;
+        const fullMah = s.battery_charge_full_uah ? Math.round(s.battery_charge_full_uah / 1000) : (learnedMah || Math.round(batPct ? 5100 : 0));
+        const designMah = s.battery_charge_full_design_uah ? Math.round(s.battery_charge_full_design_uah / 1000) : (learnedMah || fullMah);
+        // Root gives CHARGE_COUNTER; otherwise the platform's "Charge counter" line.
+        const remMah = s.battery_charge_counter_uah ? Math.round(s.battery_charge_counter_uah / 1000) : Math.round((batPct / 100) * fullMah);
+        const capacityIsEstimated = !s.battery_charge_full_design_uah && !learnedMah;
+        // Nominal cell voltage for the mAh -> Wh conversion; measured terminal potential when available.
+        const nominalV = hasVoltage ? voltageMv / 1000 : 3.85;
+        const wh = (mah) => ((mah * nominalV) / 1000).toFixed(1);
+        const designWh = wh(designMah), fullWh = wh(fullMah), remWh = wh(remMah);
+        const healthPct = designMah > 0 ? Math.min(100, (fullMah / designMah) * 100).toFixed(1) : '100.0';
+        const cycles = s.battery_cycle_count != null ? s.battery_cycle_count : null;
+
+        // Wear is derived from measured capacity loss when we have a design figure,
+        // else from cycle count. Both are approximations, labelled as such in the UI.
+        let wearPct = '0.0';
+        if (Number(healthPct) < 100) {
+          wearPct = Math.max(0, 100 - Number(healthPct)).toFixed(1);
+        } else if (cycles != null && cycles > 0) {
+          wearPct = Math.min(35.0, cycles / 2500 * 100).toFixed(1);
