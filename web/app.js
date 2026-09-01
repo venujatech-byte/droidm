@@ -3598,3 +3598,147 @@
           wearPct = Math.max(0, 100 - Number(healthPct)).toFixed(1);
         } else if (cycles != null && cycles > 0) {
           wearPct = Math.min(35.0, cycles / 2500 * 100).toFixed(1);
+        }
+        const lifeCond = cycles == null ? 'Optimal (BMS)' : (cycles < 200 ? 'Fresh pack (Optimal)' : (cycles < 500 ? 'Normal endurance' : (cycles < 800 ? 'Aged cell' : 'High cycle count')));
+
+        const historyAttribution = (s.power_attribution || []).filter(a => a.mah != null && Number.isFinite(Number(a.mah)) && Number(a.mah) >= 0);
+        const previousPower = hist.length > 1 ? hist[hist.length - 2] : null;
+        const elapsedPower = Number(s.power_attribution_secs) - Number(previousPower?.powerAttributionSecs);
+        const oldPower = new Map((previousPower?.powerAttribution || []).map(a => [a.label, Number(a.mah)]));
+        // A reset or missing component invalidates the interval; keep the historical fallback.
+        const intervalPower = !acOnline && previousPower?.powerAttributionSecs != null && elapsedPower > 0
+          && historyAttribution.every(a => oldPower.has(a.label) && Number(a.mah) >= oldPower.get(a.label))
+          && oldPower.size === historyAttribution.length;
+        const attribution = historyAttribution.map(a => ({ ...a, mah: Number(a.mah) - (intervalPower ? oldPower.get(a.label) : 0) }))
+          .sort((a, b) => b.mah - a.mah);
+        const attrTotal = attribution.reduce((sum, a) => sum + a.mah, 0);
+        const attrSeconds = intervalPower ? elapsedPower : Number(s.power_attribution_secs);
+        const attrWattsPerMah = Number.isFinite(attrSeconds) && attrSeconds > 0 && Number.isFinite(voltageMv) && voltageMv > 0
+          ? (voltageMv / 1000) * 3.6 / attrSeconds : null;
+        const formatAttrWatts = mah => attrWattsPerMah == null ? 'Unavailable' : `${(mah * attrWattsPerMah).toFixed(3)} W`;
+        const missingSectors = ['CPU', 'GPU', 'Screen', 'Wi-Fi', 'Cell standby', 'Bluetooth', 'GPS', 'Sensors', 'Camera', 'Flashlight', 'Audio', 'Video', 'Storage']
+          .filter(label => !historyAttribution.some(a => a.label.toLowerCase() === label.toLowerCase()));
+        const powerHelp = [
+          'Live power needs battery current and voltage. Some devices restrict current readings without root; subsystem history can still be available.',
+          acOnline ? 'Plugged in: on-battery history is paused. Unplug to collect new subsystem samples. Net battery power excludes power supplied directly by the charger.' : 'Subsystem watts use the latest on-battery interval when available; otherwise recorded history.',
+          attrWattsPerMah == null ? 'Average watts unavailable: battery duration or voltage is missing.' : `Estimated average power over ${attrSeconds.toFixed(3)} seconds ${intervalPower ? 'between samples' : 'on battery since the statistics reset'}, using current voltage. This is not instantaneous power.`,
+          missingSectors.length ? `Not reported separately: ${missingSectors.join(', ')}. Missing readings do not mean zero power.` : '',
+        ].filter(Boolean).join(' ');
+        const liveBatteryWatts = s.battery_current_ua != null && Number.isFinite(Number(s.battery_current_ua)) && voltageMv > 0
+          ? Math.abs(Number(s.battery_current_ua)) * voltageMv / 1e9 : null;
+        const averageWatts = attribution.length && attrWattsPerMah != null ? attrTotal * attrWattsPerMah : null;
+        const drawWatts = liveBatteryWatts ?? averageWatts;
+        const powerSource = liveBatteryWatts != null ? 'live' : averageWatts != null ? (intervalPower ? 'interval' : 'history') : 'unavailable';
+        const drawSub = powerSource === 'live' ? 'Live battery current × voltage'
+          : powerSource === 'interval' ? 'Estimated from latest battery interval'
+          : powerSource === 'history' ? 'Estimated from on-battery history' : 'No current or battery history';
+        const drawSide = powerSource === 'live' ? `${(Number(s.battery_current_ua) / 1000).toFixed(0)} mA`
+          : powerSource === 'unavailable' ? 'Unavailable' : 'ESTIMATE';
+
+        const powerHistoryKey = `${state.serial}:${powerSource}`;
+        if (state.powerHistoryKey !== powerHistoryKey) {
+          state.powerHist = [];
+          state.powerHistoryKey = powerHistoryKey;
+        }
+        if (drawWatts != null) state.powerHist.push(drawWatts);
+        if (state.powerHist.length > 25) state.powerHist.shift();
+
+        // Governor is read straight from the device; presets reflect that value.
+        const governor = s.cpu_governor || null;
+        const activePreset = !governor ? (state.powerPreset || 'balanced')
+          : governor === 'powersave' ? 'quiet'
+          : governor === 'performance' ? 'turbo' : 'balanced';
+
+        return `
+          <div class="sensors-stat-grid">
+            ${renderBigStatCard({
+              iconCode: 'e145',
+              title: 'BATTERY LEVEL',
+              heroVal: val(s.battery_pct, '%', 0),
+              heroUnit: '',
+              subtitle: `${val(s.battery_status)} · ${val(s.battery_plugged)}`,
+              leftStat: `PEAK ${peak(battHist).toFixed(0)}%`,
+              rightStat: `AVG ${avg(battHist).toFixed(0)}%`,
+              data: battHist,
+              maxVal: 100,
+              dottedRatio: 0.5,
+              color: 'var(--accent)'
+            })}
+            ${renderBigStatCard({
+              iconCode: 'e181',
+              title: 'TERMINAL VOLTAGE',
+              heroVal: voltageV,
+              heroUnit: 'V',
+              subtitle: `${s.battery_voltage_mv ? `${s.battery_voltage_mv} mV` : 'Nominal potential'}`,
+              leftStat: 'CHEMISTRY',
+              rightStat: `${s.battery_technology || 'Li-ion'}`,
+              data: voltageHist,
+              maxVal: Math.max(5.0, ...voltageHist),
+              dottedRatio: 0.5,
+              color: '#38bdf8'
+            })}
+            ${renderBigStatCard({
+              iconCode: 'e186',
+              title: 'TEMPERATURE',
+              heroVal: val(s.battery_temp_c, ' °C', 1),
+              heroUnit: '',
+              subtitle: 'Battery thermal zone',
+              leftStat: 'HEALTH',
+              rightStat: healthText,
+              data: tempHist,
+              maxVal: Math.max(60, ...tempHist),
+              dottedRatio: 0.4,
+              color: '#fbbf24'
+            })}
+            ${renderBigStatCard({
+              iconCode: 'e145',
+              title: liveBatteryWatts != null ? 'NET BATTERY POWER' : 'ESTIMATED AVG POWER',
+              heroVal: drawWatts == null ? '—' : drawWatts.toFixed(1),
+              heroUnit: 'W',
+              subtitle: drawSub,
+              leftStat: liveBatteryWatts != null ? 'POWER FLOW' : 'ATTRIBUTED POWER',
+              rightStat: drawSide,
+              data: state.powerHist,
+              maxVal: Math.max(5, ...state.powerHist),
+              dottedRatio: 0.35,
+              color: '#a78bfa'
+            })}
+          </div>
+
+          ${renderWaveformChartSvg({
+            title: 'Battery Level & Thermal Trend · 60s Window',
+            series: [
+              { label: 'Charge Level (%)', data: battHist, color: 'var(--accent)' },
+              { label: 'Battery Temperature (°C)', data: tempHist, color: '#fbbf24' }
+            ],
+            height: 200,
+            suffix: '%',
+            benchmarkVal: 50
+          })}
+
+          <section class="card" style="margin-top: 14px;">
+            <div class="card-head">
+              <div>
+                <h2>Battery Health & Pack Telemetry</h2>
+                <div class="subtle">Hardware fuel gauge, rated design capacity, and cycle endurance</div>
+              </div>
+              <span class="chip ${healthText === 'Good' ? 'active' : ''}">● ${healthText.toUpperCase()} HEALTH</span>
+            </div>
+
+            <div class="power-health-grid">
+              <div class="power-health-tile">
+                <div class="tile-header">
+                  <span class="icon">${icon('e145')}</span>
+                  <span>Health Capacity</span>
+                </div>
+                <div class="tile-hero">
+                  <b>${capacityIsEstimated ? '~' : ''}${healthPct}</b><small>%</small>
+                </div>
+                <div class="tile-bar">
+                  <div class="tile-fill" style="width: ${healthPct}%"></div>
+                </div>
+                <div class="tile-sub">
+                  <span>Design rated</span>
+                  <b>${designMah} mAh${capacityIsEstimated ? ' (est.)' : ''}</b>
+                </div>
+              </div>
