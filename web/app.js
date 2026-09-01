@@ -3742,3 +3742,147 @@
                   <b>${designMah} mAh${capacityIsEstimated ? ' (est.)' : ''}</b>
                 </div>
               </div>
+
+              <div class="power-health-tile">
+                <div class="tile-header">
+                  <span class="icon">${icon('e181')}</span>
+                  <span>Remaining Energy</span>
+                </div>
+                <div class="tile-hero">
+                  <b>${remMah}</b><small>/ ${fullMah} mAh</small>
+                </div>
+                <div class="tile-bar">
+                  <div class="tile-fill accent" style="width: ${fullMah > 0 ? Math.min(100, (remMah / fullMah) * 100) : 0}%"></div>
+                </div>
+                <div class="tile-sub">
+                  <span>Energy equivalent</span>
+                  <b>${remWh} / ${fullWh} Wh</b>
+                </div>
+              </div>
+
+              <div class="power-health-tile">
+                <div class="tile-header">
+                  <span class="icon">${icon('e186')}</span>
+                  <span>Lifecycle Endurance</span>
+                </div>
+                <div class="tile-hero">
+                  <b>${cycles != null ? cycles : 'Optimal'}</b><small>${cycles != null ? 'cycles' : ''}</small>
+                </div>
+                <div class="tile-bar">
+                  <div class="tile-fill warn" style="width: ${Math.min(100, ((cycles || 50) / 1000) * 100)}%"></div>
+                </div>
+                <div class="tile-sub">
+                  <span>Condition</span>
+                  <b>${lifeCond}</b>
+                </div>
+              </div>
+
+              <div class="power-health-tile">
+                <div class="tile-header">
+                  <span class="icon">${icon('e085')}</span>
+                  <span>Cell Degradation</span>
+                </div>
+                <div class="tile-hero">
+                  <b>~${wearPct}</b><small>% wear (est.)</small>
+                </div>
+                <div class="tile-bar">
+                  <div class="tile-fill danger" style="width: ${Math.min(100, Math.max(3, Number(wearPct)))}%"></div>
+                </div>
+                <div class="tile-sub">
+                  <span>Source</span>
+                  <b>${Number(healthPct) < 100 ? 'Capacity loss' : (cycles != null ? 'Cycle count' : 'No data')}</b>
+                </div>
+              </div>
+            </div>
+
+            <div class="kv" style="margin-top: 14px; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 14px;">
+              <div><small>Battery Chemistry</small><b>${val(s.battery_technology)}</b></div>
+              <div><small>Terminal Potential</small><b>${hasVoltage ? `${voltageV} V (${voltageMv} mV)` : 'Unavailable'}</b></div>
+              <div><small>Current Flow (Fuel Gauge)</small><b>${s.battery_current_ua != null ? `${(s.battery_current_ua / 1000).toFixed(0)} mA` : 'Unavailable without root'}</b></div>
+              <div><small>Charge Full Design</small><b>${designMah} mAh (${designWh} Wh)${capacityIsEstimated ? ' (est.)' : ''}</b></div>
+              <div><small>Battery Pack Health</small><b>${healthText}${Number(healthPct) < 100 ? ` (${healthPct}%)` : ''}</b></div>
+              <div><small>Cycle Count</small><b>${cycles != null ? `${cycles} cycles (BMS usage counter)` : 'Unavailable'}</b></div>
+              <div><small>Thermal Zone Temp</small><b>${val(s.battery_temp_c, ' °C', 1)}</b></div>
+              <div><small>Overheat / Swelling Guard</small><b>Active (Kernel BMS)</b></div>
+            </div>
+          </section>
+
+          <div class="grid two">
+            <section class="card">
+              <div class="card-head">
+                <h2>Android Battery Subsystem</h2>
+                <span class="chip">DUMPSYS BATTERY</span>
+              </div>
+              <div class="kv">
+                <div><small>Charging State</small><b>${val(s.battery_status)}</b></div>
+                <div><small>Power Source</small><b>${val(s.battery_plugged)}</b></div>
+                <div><small>Terminal Voltage</small><b>${hasVoltage ? `${voltageV} V (${voltageMv} mV)` : 'Unavailable'}</b></div>
+                <div><small>Battery Temperature</small><b>${val(s.battery_temp_c, ' °C', 1)}</b></div>
+                <div><small>Battery Health</small><b>${healthText}</b></div>
+                <div><small>Battery Chemistry</small><b>${val(s.battery_technology)}</b></div>
+                <div><small>Device Uptime</small><b>${uptimeHours}h ${uptimeMins}m</b></div>
+                <div><small>Charger Connected</small><b>${acOnline ? 'Yes' : 'No'}</b></div>
+              </div>
+            </section>
+
+            <section class="card power-attribution">
+              <div class="card-head">
+                <h2>Android Power Attribution <span class="power-help"><button type="button" aria-label="About power readings" aria-describedby="power-help-text">?</button><span role="tooltip" id="power-help-text">${escapeHtml(powerHelp)}</span></span></h2>
+                <span class="chip">${acOnline ? 'HISTORY · PLUGGED IN' : intervalPower ? 'INTERVAL · AVG W' : 'HISTORY · AVG W'}</span>
+              </div>
+              <div class="android-power-alloc-labels" style="margin-bottom: 12px;">
+                <span>Live net battery power</span><b>${liveBatteryWatts == null ? 'Unavailable' : `${liveBatteryWatts.toFixed(3)} W`}</b>
+              </div>
+
+              ${attribution.length ? `
+                <div class="android-power-alloc-list">
+                  ${attribution.map(a => `
+                    <div class="android-power-alloc-item">
+                      <div class="android-power-alloc-labels">
+                        <span>${escapeHtml(a.label)}</span>
+                        <b>${formatAttrWatts(Number(a.mah))}</b>
+                      </div>
+                      <div class="android-power-alloc-bar">
+                        <div class="android-power-alloc-fill" style="width: ${attrTotal > 0 ? Math.min(100, (Number(a.mah) / attrTotal) * 100) : 0}%"></div>
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+                <div class="android-power-alloc-labels" style="margin-top: 12px;"><span>Total average</span><b>${formatAttrWatts(attrTotal)}</b></div>
+              ` : '<p class="subtle">No power attribution history</p>'}
+            </section>
+          </div>
+
+          <section class="card" style="margin-top: 14px;">
+            <div class="card-head">
+              <h2>Android CPU Governor & Power Profile</h2>
+              <span class="chip">ACTIVE: ${activePreset === 'quiet' ? 'powersave' : activePreset === 'turbo' ? 'performance' : 'schedutil'}</span>
+            </div>
+            <div class="android-power-presets-grid">
+              <div class="android-power-preset-card ${activePreset === 'quiet' ? 'active' : ''}" data-power-preset="quiet">
+                <div class="preset-card-top">
+                  <b>Battery Saver / Eco</b>
+                  ${activePreset === 'quiet' ? '<span class="preset-active-chip">ACTIVE</span>' : ''}
+                </div>
+                <p class="subtle">Prioritize battery longevity & reduce peak thermal throttling</p>
+                <div class="preset-gov-badge">GOV: powersave</div>
+              </div>
+
+              <div class="android-power-preset-card ${activePreset === 'balanced' ? 'active' : ''}" data-power-preset="balanced">
+                <div class="preset-card-top">
+                  <b>Balanced (Dynamic)</b>
+                  ${activePreset === 'balanced' ? '<span class="preset-active-chip">ACTIVE</span>' : ''}
+                </div>
+                <p class="subtle">Optimal frequency scaling governor for fluid Android UI</p>
+                <div class="preset-gov-badge">GOV: schedutil</div>
+              </div>
+
+              <div class="android-power-preset-card ${activePreset === 'turbo' ? 'active' : ''}" data-power-preset="turbo">
+                <div class="preset-card-top">
+                  <b>Performance / Turbo</b>
+                  ${activePreset === 'turbo' ? '<span class="preset-active-chip">ACTIVE</span>' : ''}
+                </div>
+                <p class="subtle">Lock higher frequencies for gaming and intensive workloads</p>
+                <div class="preset-gov-badge">GOV: performance</div>
+              </div>
+            </div>
