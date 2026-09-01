@@ -3886,3 +3886,147 @@
                 <div class="preset-gov-badge">GOV: performance</div>
               </div>
             </div>
+          </section>
+        `;
+      },
+
+      bluetooth: () => `
+        <div class="sensors-stat-grid">
+          ${renderBigStatCard({
+            iconCode: 'e14f',
+            title: 'BLUETOOTH RADIO',
+            heroVal: onOff(s.bluetooth_enabled),
+            heroUnit: '',
+            subtitle: 'Android global Bluetooth setting',
+            leftStat: 'RADIO',
+            rightStat: s.bluetooth_enabled ? 'ONLINE' : 'OFFLINE',
+            data: [s.bluetooth_enabled ? 1 : 0, s.bluetooth_enabled ? 1 : 0],
+            maxVal: 1,
+            dottedRatio: 0.5,
+            color: 'var(--accent)'
+          })}
+          ${renderBigStatCard({
+            iconCode: 'e14f',
+            title: 'ADAPTER STATE',
+            heroVal: s.bluetooth_enabled ? 'Enabled' : 'Disabled',
+            heroUnit: '',
+            subtitle: 'Host Bluetooth controller',
+            leftStat: 'STATE',
+            rightStat: s.bluetooth_enabled ? 'ACTIVE' : 'IDLE',
+            data: [s.bluetooth_enabled ? 1 : 0, s.bluetooth_enabled ? 1 : 0],
+            maxVal: 1,
+            dottedRatio: 0.5,
+            color: 'var(--accent)'
+          })}
+        </div>
+
+        <section class="card">
+          <div class="card-head">
+            <h2>Bluetooth Status & Radio Controllers</h2>
+            <span class="chip">SETTINGS INTEGRATION</span>
+          </div>
+          <div class="kv">
+            <div><small>Adapter</small><b>${escapeHtml(s.bluetooth_name || 'Unavailable')}</b></div>
+            <div><small>Connection</small><b>${escapeHtml(s.bluetooth_connection_state || 'Unavailable')}</b></div>
+            <div><small>Active accessory</small><b>${escapeHtml(s.bluetooth_active_device || 'None reported')}</b></div>
+            <div><small>Scan mode</small><b>${escapeHtml(s.bluetooth_scan_mode || 'Unavailable')}</b></div>
+          </div>
+          <p class="subtle">Paired accessories: ${(s.bluetooth_bonded_devices || []).map(escapeHtml).join(', ') || 'None reported'}</p>
+          <p class="subtle">Profiles: ${(s.bluetooth_profiles || []).map(escapeHtml).join(', ') || 'Unavailable'}</p>
+          <button class="button" data-action="bluetooth_auto_connect">Pair / connect on device</button>
+        </section>
+      `,
+
+      temperature: () => {
+        const maxTemp = Number(temps.length ? Math.max(...temps.map(x => Number(x.temp_c)).filter(Number.isFinite)) : (Number(s.battery_temp_c) || 0));
+        return `
+          <div class="sensors-stat-grid">
+            ${renderBigStatCard({
+              iconCode: 'e186',
+              title: 'HIGHEST TEMP',
+              heroVal: `${maxTemp.toFixed(1)}`,
+              heroUnit: '°C',
+              subtitle: 'Warmest kernel thermal zone',
+              leftStat: `AVG ${avg(tempHist).toFixed(0)}°C`,
+              rightStat: `PEAK ${peak(tempHist).toFixed(0)}°C`,
+              data: tempHist,
+              maxVal: Math.max(70, ...tempHist),
+              dottedRatio: 0.45,
+              color: maxTemp >= 60 ? '#f87171' : maxTemp >= 45 ? '#fbbf24' : 'var(--accent)'
+            })}
+            ${renderBigStatCard({
+              iconCode: 'e145',
+              title: 'BATTERY TEMP',
+              heroVal: val(s.battery_temp_c, ' °C', 1),
+              heroUnit: '',
+              subtitle: 'Integrated battery sensor',
+              leftStat: 'BATTERY',
+              rightStat: `${val(s.battery_temp_c, '°C', 1)}`,
+              data: tempHist,
+              maxVal: Math.max(60, ...tempHist),
+              dottedRatio: 0.4,
+              color: '#38bdf8'
+            })}
+            ${renderBigStatCard({
+              iconCode: 'e186',
+              title: 'THERMAL ZONES',
+              heroVal: `${temps.length}`,
+              heroUnit: 'zones',
+              subtitle: 'Accessible /sys/class/thermal',
+              leftStat: 'KERNEL',
+              rightStat: `${temps.length} ZONES`,
+              data: Array(tempHist.length).fill(temps.length),
+              maxVal: temps.length || 1,
+              dottedRatio: 0.9,
+              color: 'var(--accent)'
+            })}
+            ${renderBigStatCard({
+              iconCode: 'e085',
+              title: 'REGISTERED SENSORS',
+              heroVal: `${sensors.length}`,
+              heroUnit: 'sensors',
+              subtitle: 'Dumpsys sensorservice inventory',
+              leftStat: 'HARDWARE',
+              rightStat: `${sensors.length} REPORTERS`,
+              data: Array(tempHist.length).fill(sensors.length),
+              maxVal: sensors.length || 1,
+              dottedRatio: 0.9,
+              color: '#a78bfa'
+            })}
+          </div>
+
+          ${renderWaveformChartSvg({
+            title: 'Thermal History · 60s Window',
+            series: [{ label: 'Thermal Zone History', data: tempHist, color: '#fbbf24' }],
+            height: 200,
+            suffix: ' °C',
+            benchmarkVal: 45
+          })}
+
+          <section class="card">
+            <div class="card-head">
+              <div>
+                <h2>Thermal Zones</h2>
+                <div class="subtle">Read from accessible Android kernel thermal zones</div>
+              </div>
+            </div>
+            ${temps.length ? `
+              <div class="thermal-grid">
+                ${temps.map(t => {
+                  const val = Number(t.temp_c) || 0;
+                  const status = val >= 60 ? 'hot' : val >= 45 ? 'warm' : 'normal';
+                  const statusText = val >= 60 ? 'HIGH' : val >= 45 ? 'WARM' : 'NORMAL';
+                  return `
+                    <div class="thermal-zone-card">
+                      <div class="stat-card-title">${escapeHtml(t.name)}</div>
+                      <div class="metric-value">${val.toFixed(1)} °C</div>
+                      <div><span class="thermal-badge ${status}">${statusText}</span></div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            ` : empty('Thermal readings unavailable', 'Android did not expose current thermal zone values.')}
+          </section>
+
+          <section class="card">
+            <div class="card-head">
