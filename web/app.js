@@ -4030,3 +4030,147 @@
 
           <section class="card">
             <div class="card-head">
+              <h2>Registered Sensors</h2>
+              <span class="chip">${sensors.length} reported</span>
+            </div>
+            ${sensors.length ? `
+              <div class="sensor-tags">
+                ${sensors.map(name => `<span class="chip">${escapeHtml(name)}</span>`).join('')}
+              </div>
+            ` : state.sensorInventoryLoading ? empty('Loading sensor inventory', 'Android sensor metadata is being read once for this device.') : empty('Sensor inventory unavailable', 'The device does not expose its sensor list through dumpsys sensorservice.')}
+          </section>
+        `;
+      }
+    };
+
+    const activeView = state.sensorsView in views ? views[state.sensorsView]() : views.overview();
+
+    content.innerHTML = `
+      <div class="sensors-container">
+        <nav class="sensors-subnav-bar" aria-label="Sensor subtabs">
+          ${subtabs.map(([id, label, iconCode]) => `
+            <button class="sensors-subtab-pill ${state.sensorsView === id ? 'active' : ''}" data-sensor-view="${id}">
+              <span class="icon">${icon(iconCode)}</span>
+              <span>${escapeHtml(label)}</span>
+            </button>
+          `).join('')}
+        </nav>
+
+        <main class="sensors-view-main">
+          ${activeView}
+        </main>
+      </div>
+    `;
+
+    updateHeaderTelemetryControls();
+
+    // Task Manager & Sensor Event Wiring
+    const filter = $('#sensor-app-filter');
+    if (filter) {
+      filter.oninput = () => {
+        state.topAppsSearch = filter.value;
+        state.sensorFilter = filter.value;
+        renderSensors();
+        const next = $('#sensor-app-filter');
+        if (next) {
+          next.focus();
+          next.setSelectionRange(next.value.length, next.value.length);
+        }
+      };
+    }
+    const clearFilter = $('#sensor-app-filter-clear');
+    if (clearFilter) {
+      clearFilter.onclick = () => {
+        state.topAppsSearch = '';
+        state.sensorFilter = '';
+        renderSensors();
+      };
+    }
+
+    const tmCadence = $('#tm-refresh-cadence');
+    if (tmCadence) {
+      tmCadence.onchange = () => {
+        state.sensorsCadence = Number(tmCadence.value);
+        updateHeaderTelemetryControls();
+        clearTimeout(state.sensorTimer);
+        if (state.sensorsCadence > 0) {
+          state.sensorTimer = setTimeout(pollSensors, state.sensorsCadence);
+        }
+      };
+    }
+
+    document.querySelectorAll('.tm-header-cell[data-sort]').forEach(el => {
+      el.onclick = () => {
+        const col = el.dataset.sort;
+        if (state.topAppsSort === col) {
+          state.topAppsSortDesc = !state.topAppsSortDesc;
+        } else {
+          state.topAppsSort = col;
+          state.topAppsSortDesc = (col !== 'name');
+        }
+        renderSensors();
+      };
+    });
+
+    document.querySelectorAll('[data-toggle-group]').forEach(btn => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        const key = btn.dataset.toggleGroup;
+        if (!state.topAppsExpandedGroups) state.topAppsExpandedGroups = new Set();
+        if (state.topAppsExpandedGroups.has(key)) {
+          state.topAppsExpandedGroups.delete(key);
+        } else {
+          state.topAppsExpandedGroups.add(key);
+        }
+        renderSensors();
+      };
+    });
+
+    document.querySelectorAll('[data-toggle-section]').forEach(row => {
+      row.onclick = () => {
+        const sec = row.dataset.toggleSection;
+        if (sec === 'apps') {
+          state.topAppsAppsExpanded = state.topAppsAppsExpanded === false;
+        } else if (sec === 'bg') {
+          state.topAppsBgExpanded = !state.topAppsBgExpanded;
+        }
+        renderSensors();
+      };
+    });
+
+    document.querySelectorAll('.tm-row[data-pid]').forEach(row => {
+      row.onclick = (e) => {
+        if (e.target.closest('[data-toggle-group]')) return;
+        const pid = Number(row.dataset.pid);
+        state.topAppsSelectedPid = (state.topAppsSelectedPid === pid ? null : pid);
+        renderSensors();
+      };
+    });
+
+    const endTask = $('#tm-btn-end-task');
+    if (endTask && state.topAppsSelectedPid) {
+      endTask.onclick = async () => {
+        const pid = state.topAppsSelectedPid;
+        if (!pid) return;
+        const group = allGroups.find((processGroup) => processGroup.pids.includes(pid));
+        try {
+          const packageName = group?.key;
+          if (group?.isApp && /^[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)+$/.test(packageName || '')) await action('stop_app', packageName);
+          else await action('kill_process', String(pid));
+          state.topAppsSelectedPid = null;
+          await pollSensors(true);
+        } catch { /* The action helper reports ADB permission and process errors. */ }
+      };
+    }
+
+    if (state.sensorsView === 'temperature' && !state.sensorInventoryLoaded && !state.sensorInventoryLoading && state.serial) {
+      state.sensorInventoryLoading = true;
+      const serial = state.serial;
+      invokeOrFail('adb_data', { serial, section: 'sensor_inventory', path: null }).then(names => {
+        if (state.serial === serial) {
+          state.sensorInventory = names;
+          state.sensorInventoryLoaded = true;
+        }
+      }).catch(error => toast(String(error), true)).finally(() => {
+        state.sensorInventoryLoading = false;
+        if (state.tab === 'hardware-sensors' && state.serial === serial) {
