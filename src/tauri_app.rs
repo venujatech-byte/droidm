@@ -190,3 +190,99 @@ async fn adb_screenshot(serial: String) -> Result<String, String> {
             "data:image/png;base64,{}",
             base64::engine::general_purpose::STANDARD.encode(png)
         ))
+    })
+    .await
+}
+
+#[tauri::command]
+async fn adb_photo_preview(serial: String, path: String) -> Result<String, String> {
+    on_worker(move || {
+        use base64::Engine;
+        let bytes = crate::adb::read_remote_file(&serial, &path)?;
+        let mime = match std::path::Path::new(&path)
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase()
+            .as_str()
+        {
+            "png" => "image/png",
+            "webp" => "image/webp",
+            "gif" => "image/gif",
+            _ => "image/jpeg",
+        };
+        Ok(format!(
+            "data:{mime};base64,{}",
+            base64::engine::general_purpose::STANDARD.encode(bytes)
+        ))
+    })
+    .await
+}
+
+#[tauri::command]
+async fn adb_photos_page(serial: String, cursor: Option<String>) -> Result<Value, String> {
+    on_worker(move || {
+        let (items, next_cursor) = crate::adb::list_photos_page(Some(&serial), cursor.as_deref(), 10);
+        Ok(json!({
+            "items": items.into_iter().map(|photo| json!({
+                "name": photo.name, "path": photo.path, "size": photo.size_str, "date": photo.date_str
+            })).collect::<Vec<_>>(),
+            "next_cursor": next_cursor
+        }))
+    }).await
+}
+
+#[tauri::command]
+async fn adb_photos_count(serial: String) -> Result<usize, String> {
+    on_worker(move || Ok(crate::adb::count_photos(Some(&serial)))).await
+}
+
+#[tauri::command]
+async fn adb_photo_thumbnail(serial: String, path: String) -> Result<String, String> {
+    on_worker(move || {
+        use base64::Engine;
+        let bytes = crate::adb::read_remote_file(&serial, &path)?;
+        let image = image::load_from_memory(&bytes).map_err(|error| format!("Could not decode photo: {error}"))?;
+        let thumbnail = image.thumbnail(480, 360);
+        let mut encoded = std::io::Cursor::new(Vec::new());
+        thumbnail.write_to(&mut encoded, image::ImageFormat::Jpeg)
+            .map_err(|error| format!("Could not create photo thumbnail: {error}"))?;
+        Ok(format!("data:image/jpeg;base64,{}", base64::engine::general_purpose::STANDARD.encode(encoded.into_inner())))
+    }).await
+}
+
+#[tauri::command]
+async fn adb_action(
+    serial: String,
+    action: String,
+    value: Option<String>,
+    extra: Option<String>,
+) -> Result<String, String> {
+    on_worker(move || {
+        let value = value.unwrap_or_default();
+        let extra = extra.unwrap_or_default();
+        match action.as_str() {
+            "key_back" => crate::adb::send_keyevent(&serial, 4).map(|_| "Back sent".into()),
+            "key_home" => crate::adb::send_keyevent(&serial, 3).map(|_| "Home sent".into()),
+            "key_recents" => crate::adb::send_keyevent(&serial, 187).map(|_| "Recents sent".into()),
+            "key_power" => crate::adb::send_keyevent(&serial, 26).map(|_| "Power sent".into()),
+            "key_volume_up" => crate::adb::volume_up(Some(&serial)),
+            "key_volume_down" => crate::adb::volume_down(Some(&serial)),
+            "reboot" => crate::adb::reboot_device(&serial, &value),
+            "shell" => crate::adb::adb_cmd(Some(&serial), &["shell", &value]),
+            "external_adb_shell" => crate::adb::launch_external_adb_terminal(&serial).map(|_| "External ADB shell opened".into()),
+            "send_text" => crate::adb::send_text(&serial, &value).map(|_| "Text sent".into()),
+            "call" => crate::adb::start_phone_call(Some(&serial), &value),
+            "answer_call" => crate::adb::send_keyevent(&serial, 79).map(|_| "Answer command sent. Android handles it only when a call is ringing.".into()),
+            "hangup" => crate::adb::end_phone_call(Some(&serial)),
+            "send_sms" => crate::adb::send_sms(Some(&serial), &value, &extra),
+            "clipboard_get" => crate::adb::get_clipboard(&serial),
+            "clipboard_set" => {
+                crate::adb::set_clipboard(&serial, &value).map(|_| "Clipboard sent".into())
+            }
+            "launch_app" => crate::adb::launch_app(&serial, &value).map(|_| "App launched".into()),
+            "stop_app" => crate::adb::force_stop_app(&serial, &value).map(|_| "App stopped".into()),
+            "kill_process" => {
+                let pid = value.parse::<u32>().map_err(|_| "Invalid process ID".to_string())?;
+                crate::adb::adb_cmd(Some(&serial), &["shell", "kill", "-9", &pid.to_string()]).map(|_| "Process terminated".into())
+            }
