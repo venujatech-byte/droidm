@@ -4174,3 +4174,127 @@
       }).catch(error => toast(String(error), true)).finally(() => {
         state.sensorInventoryLoading = false;
         if (state.tab === 'hardware-sensors' && state.serial === serial) {
+          renderHardwareSensors();
+        } else if (state.tab === 'sensors' && state.sensorsView === 'temperature' && state.serial === serial) {
+          renderSensors();
+        }
+      });
+    }
+
+    clearTimeout(state.sensorTimer);
+    if (state.tab === 'sensors' && !document.hidden && state.sensorsCadence > 0) {
+      state.sensorTimer = setTimeout(pollSensors, state.sensorsCadence);
+    }
+  }
+  async function refreshCurrent() {
+    if (state.tab === 'calls') state.contacts = null;
+    const btn = $('#refresh');
+    if (btn) btn.classList.add('refreshing');
+    try {
+      if (state.tab === 'overview') {
+        await refreshTelemetry();
+      } else if (state.tab === 'storage') {
+        state.storageVolumesSerial = '';
+        await renderTab();
+      } else if (state.tab === 'sensors') {
+        await pollSensors(true);
+      } else {
+        showPageLoading(tabNames[state.tab]);
+        await renderTab();
+      }
+    } finally {
+      if (btn) btn.classList.remove('refreshing');
+    }
+  }
+
+  document.addEventListener('click', async (event) => {
+    const copyBtn = event.target.closest('[data-copy]');
+    if (copyBtn) {
+      try {
+        await navigator.clipboard.writeText(copyBtn.dataset.copy);
+        toast(`Copied ${copyBtn.dataset.copy}`);
+      } catch {
+        toast(`Copied: ${copyBtn.dataset.copy}`);
+      }
+      return;
+    }
+    const sensorTab = event.target.closest('[data-sensor-view]'); if (sensorTab) { state.sensorsView=sensorTab.dataset.sensorView; renderSensors(); return; }
+    const dataNetwork = event.target.closest('[data-data-network]'); if (dataNetwork) { state.dataUsageNetwork = dataNetwork.dataset.dataNetwork; renderSensors(); return; }
+    const powerPresetBtn = event.target.closest('[data-power-preset]'); if (powerPresetBtn) { state.powerPreset = powerPresetBtn.dataset.powerPreset; renderSensors(); return; }
+    const gpuPresetBtn = event.target.closest('[data-gpu-preset]'); if (gpuPresetBtn) { state.gpuPreset = gpuPresetBtn.dataset.gpuPreset; renderSensors(); return; }
+    const tab = event.target.closest('[data-tab]'); if (tab) { selectTab(tab.dataset.tab); return; }
+    if (event.target.closest('[data-refresh]') || event.target.closest('#refresh')) { await refreshCurrent(); return; }
+    const button=event.target.closest('[data-action]'); if (button) {
+      if (['delete_file','delete_photo'].includes(button.dataset.action) && !window.confirm('Delete this item from the Android device?')) return;
+      if (button.dataset.action === 'reboot' && button.dataset.value !== 'system' && !window.confirm(`Restart device to ${button.dataset.value}?`)) return;
+      button.disabled=true;
+      try { await action(button.dataset.action,button.dataset.value || ''); if (['delete_photo','delete_file'].includes(button.dataset.action)) await renderTab(); }
+      catch {} finally { button.disabled=false; }
+    }
+    if(event.target.closest('#retry-devices')) await refreshDevices();
+  });
+  $('#device-select').addEventListener('change', async e => { state.serial=e.target.value; state.telemetry=null; await refreshDevices(); });
+  $('#refresh').addEventListener('click', () => void refreshCurrent());
+  const headerCadence = $('#sensor-cadence');
+  if (headerCadence) {
+    headerCadence.addEventListener('change', () => {
+      state.sensorsCadence = Number(headerCadence.value);
+      updateHeaderTelemetryControls();
+      clearTimeout(state.sensorTimer);
+      if (state.sensorsCadence > 0) {
+        state.sensorTimer = setTimeout(pollSensors, state.sensorsCadence);
+      }
+    });
+  }
+  async function syncTheme() {
+    if (!invoke) return;
+    try {
+      const t = await invoke('adb_theme_info');
+      if (t) {
+        const root = document.documentElement.style;
+        if (t.bg) root.setProperty('--bg', t.bg);
+        if (t.side) root.setProperty('--side', t.side);
+        if (t.surface) root.setProperty('--surface', t.surface);
+        if (t.surface2) root.setProperty('--surface2', t.surface2);
+        if (t.well) root.setProperty('--well', t.well);
+        if (t.line) root.setProperty('--line', t.line);
+        if (t.text) root.setProperty('--text', t.text);
+        if (t.muted) root.setProperty('--muted', t.muted);
+        if (t.dim) root.setProperty('--dim', t.dim);
+        if (t.accent) root.setProperty('--accent', t.accent);
+        if (t.accent_strong) root.setProperty('--accent-strong', t.accent_strong);
+        if (t.accent_soft) root.setProperty('--accent-soft', t.accent_soft);
+        if (t.accent_text) root.setProperty('--accent-text', t.accent_text);
+        document.documentElement.setAttribute('data-theme', t.theme);
+        document.documentElement.style.colorScheme = t.is_dark ? 'dark' : 'light';
+      }
+    } catch {}
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      clearInterval(state.screenTimer);
+      state.screenTimer = null;
+      clearTimeout(state.sensorTimer);
+      state.sensorTimer = null;
+    } else {
+      void syncTheme();
+      if (state.tab === 'sensors' && state.serial) void pollSensors(true);
+    }
+  });
+
+  window.addEventListener('focus', () => { void syncTheme(); });
+
+  (async () => {
+    if (!invoke) {
+      content.innerHTML = `<div class="card empty"><b>Tauri runtime is unavailable</b><span>Launch the Android cockpit from Server Launcher.</span></div>`;
+      return;
+    }
+    try {
+      state.serial = await invoke('adb_initial_serial') || '';
+      await syncTheme();
+      await refreshDevices();
+    } catch(e) { toast(String(e), true); }
+
+  })();
+})();
