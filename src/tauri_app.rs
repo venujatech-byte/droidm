@@ -382,3 +382,95 @@ async fn adb_action(
                     .map(|_| format!("App backup initiated for {}. Saved to {}", pkg, dest.display()))
             },
             "restore_backup" => {
+                crate::adb::adb_cmd(Some(&serial), &["restore", &value])
+                    .map(|_| "Backup restore command sent. Confirm restore prompt on phone screen.".into())
+            },
+            "dump_partition" => {
+                let part = value.trim();
+                let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+                let dest = std::path::PathBuf::from(home).join("Downloads").join(format!("{}_{}.img", part, serial.replace([':', '.'], "_")));
+                let dest_str = dest.to_string_lossy().to_string();
+                let block = format!("/dev/block/by-name/{}", part);
+                crate::adb::adb_cmd(Some(&serial), &["shell", "su", "-c", &format!("dd if={} of=/sdcard/dump_{}.img bs=4M", block, part)])?;
+                crate::adb::adb_cmd(Some(&serial), &["pull", &format!("/sdcard/dump_{}.img", part), &dest_str])?;
+                let _ = crate::adb::adb_cmd(Some(&serial), &["shell", "rm", "-f", &format!("/sdcard/dump_{}.img", part)]);
+                Ok(format!("Partition '{}' dumped successfully to {}", part, dest.display()))
+            },
+            "set_density" => {
+                let dpi = value.trim();
+                if dpi == "reset" || dpi.is_empty() {
+                    crate::adb::adb_cmd(Some(&serial), &["shell", "wm", "density", "reset"])
+                        .map(|_| "Display density reset to default".into())
+                } else {
+                    crate::adb::adb_cmd(Some(&serial), &["shell", "wm", "density", dpi])
+                        .map(|_| format!("Display density set to {} DPI", dpi))
+                }
+            },
+            "set_animations" => {
+                let scale = if value.trim().is_empty() { "0.5" } else { value.trim() };
+                let _ = crate::adb::adb_cmd(Some(&serial), &["shell", "settings", "put", "global", "window_animation_scale", scale]);
+                let _ = crate::adb::adb_cmd(Some(&serial), &["shell", "settings", "put", "global", "transition_animation_scale", scale]);
+                let _ = crate::adb::adb_cmd(Some(&serial), &["shell", "settings", "put", "global", "animator_duration_scale", scale]);
+                Ok(format!("Animation scales set to {}x", scale))
+            },
+            "push_photo" => {
+                let host_path = std::path::Path::new(&value);
+                let fname = if extra.is_empty() {
+                    host_path.file_name().and_then(|n| n.to_str()).unwrap_or("photo.jpg")
+                } else {
+                    &extra
+                };
+                let dest_device = format!("/sdcard/DCIM/Camera/{}", fname);
+                crate::adb::adb_cmd(Some(&serial), &["push", &value, &dest_device])?;
+                let _ = crate::adb::adb_cmd(Some(&serial), &["shell", "am", "broadcast", "-a", "android.intent.action.MEDIA_SCANNER_SCAN_FILE", "-d", &format!("file://{}", dest_device)]);
+                Ok(format!("Uploaded photo to {}", dest_device))
+            },
+            "bluetooth_toggle" => {
+                let current = crate::adb::adb_cmd(Some(&serial), &["shell", "settings", "get", "global", "bluetooth_on"]).unwrap_or_default();
+                let next = if current.trim() == "1" { "disable" } else { "enable" };
+                crate::adb::adb_cmd(Some(&serial), &["shell", "svc", "bluetooth", next])
+                    .map(|_| format!("Bluetooth radio {next}d"))
+            },
+            "bluetooth_enable" => {
+                crate::adb::adb_cmd(Some(&serial), &["shell", "svc", "bluetooth", "enable"])
+                    .map(|_| "Bluetooth radio enabled".into())
+            },
+            "bluetooth_disable" => {
+                crate::adb::adb_cmd(Some(&serial), &["shell", "svc", "bluetooth", "disable"])
+                    .map(|_| "Bluetooth radio disabled".into())
+            },
+            "bluetooth_auto_connect" => {
+                crate::adb::adb_cmd(Some(&serial), &["shell", "svc", "bluetooth", "enable"])?;
+                crate::adb::adb_cmd(Some(&serial), &["shell", "am", "start", "-a", "android.settings.BLUETOOTH_SETTINGS"])?;
+                Ok("Bluetooth enabled. Choose an accessory on the device to pair or connect.".into())
+            },
+            "bluetooth_settings" => {
+                crate::adb::adb_cmd(Some(&serial), &["shell", "am", "start", "-a", "android.settings.BLUETOOTH_SETTINGS"])
+                    .map(|_| "Bluetooth settings launched on device".into())
+            },
+            _ => Err("Unsupported ADB action".to_string()),
+        }
+    })
+    .await
+}
+
+pub fn run() {
+    tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![
+            adb_devices,
+            adb_initial_serial,
+            adb_accent_color,
+            adb_theme_info,
+            adb_telemetry,
+            adb_data,
+            adb_storage_volumes,
+            adb_screenshot,
+            adb_photos_page,
+            adb_photos_count,
+            adb_photo_preview,
+            adb_photo_thumbnail,
+            adb_action
+        ])
+        .run(tauri::generate_context!())
+        .expect("failed to start Android Cockpit");
+}
