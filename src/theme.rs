@@ -1,5 +1,34 @@
-use eframe::egui::{Color32, Rounding, Stroke, Visuals};
 use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct Color32(pub u8, pub u8, pub u8, pub u8);
+
+impl Color32 {
+    pub const WHITE: Self = Self(255, 255, 255, 255);
+    pub const BLACK: Self = Self(0, 0, 0, 255);
+    pub const TRANSPARENT: Self = Self(0, 0, 0, 0);
+
+    pub const fn from_rgb(r: u8, g: u8, b: u8) -> Self {
+        Self(r, g, b, 255)
+    }
+
+    pub const fn from_rgba_unmultiplied(r: u8, g: u8, b: u8, a: u8) -> Self {
+        Self(r, g, b, a)
+    }
+
+    pub const fn r(&self) -> u8 {
+        self.0
+    }
+    pub const fn g(&self) -> u8 {
+        self.1
+    }
+    pub const fn b(&self) -> u8 {
+        self.2
+    }
+    pub const fn a(&self) -> u8 {
+        self.3
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum ThemeMode {
@@ -41,20 +70,6 @@ impl ThemeMode {
             ThemeMode::Nord => "Nord",
             ThemeMode::TokyoNight => "Tokyo Night",
             ThemeMode::Gtk4 => "GTK4 / System (Follow Desktop)",
-        }
-    }
-
-    pub fn emoji(&self) -> &'static str {
-        match self {
-            ThemeMode::Dark => crate::lucide::MOON,
-            ThemeMode::NocturnalCommand => crate::lucide::SPARKLES,
-            ThemeMode::CatppuccinMocha => crate::lucide::PALETTE,
-            ThemeMode::CatppuccinLatte => crate::lucide::SUN,
-            ThemeMode::Light => crate::lucide::SUN,
-            ThemeMode::Dracula => crate::lucide::FLAME,
-            ThemeMode::Nord => crate::lucide::COMPASS,
-            ThemeMode::TokyoNight => crate::lucide::ACTIVITY,
-            ThemeMode::Gtk4 => crate::lucide::SETTINGS,
         }
     }
 
@@ -649,56 +664,6 @@ impl ThemePalette {
             Color32::WHITE
         };
     }
-
-    pub fn egui_visuals(&self) -> Visuals {
-        let mut visuals = if self.is_dark {
-            Visuals::dark()
-        } else {
-            Visuals::light()
-        };
-        visuals.panel_fill = self.bg_app;
-        visuals.window_fill = self.bg_card;
-        visuals.faint_bg_color = self.bg_subtle;
-        visuals.extreme_bg_color = self.bg_input;
-
-        visuals.widgets.noninteractive.bg_fill = self.bg_card;
-        visuals.widgets.noninteractive.fg_stroke = Stroke::new(1.0_f32, self.text_secondary);
-        visuals.widgets.noninteractive.bg_stroke = Stroke::NONE;
-        visuals.widgets.noninteractive.rounding = Rounding::same(8.0);
-        if self.is_dark {
-            visuals.widgets.noninteractive.weak_bg_fill = Color32::from_rgb(180, 185, 195);
-        }
-
-        visuals.widgets.inactive.bg_fill = self.bg_button;
-        visuals.widgets.inactive.fg_stroke = Stroke::new(1.0_f32, self.text_secondary);
-        visuals.widgets.inactive.bg_stroke = Stroke::NONE;
-        visuals.widgets.inactive.rounding = Rounding::same(8.0);
-
-        visuals.widgets.hovered.bg_fill = self.bg_button_hover;
-        visuals.widgets.hovered.fg_stroke = Stroke::new(1.0_f32, self.text_primary);
-        visuals.widgets.hovered.bg_stroke = Stroke::NONE;
-        visuals.widgets.hovered.rounding = Rounding::same(8.0);
-
-        visuals.widgets.active.bg_fill = self.accent;
-        visuals.widgets.active.fg_stroke = Stroke::new(1.0_f32, self.accent_text);
-        visuals.widgets.active.bg_stroke = Stroke::NONE;
-        visuals.widgets.active.rounding = Rounding::same(8.0);
-
-        visuals.widgets.open.bg_fill = self.bg_card;
-        visuals.widgets.open.fg_stroke = Stroke::new(1.0_f32, self.text_primary);
-        visuals.widgets.open.bg_stroke = Stroke::NONE;
-
-        visuals.selection.bg_fill = self.accent;
-        visuals.selection.stroke = Stroke::NONE;
-
-        visuals.override_text_color = Some(self.text_primary);
-        // Make hint/placeholder text in TextEdit inputs a visible light grey
-        visuals.text_cursor.stroke = Stroke::new(1.0_f32, self.text_secondary);
-        visuals.window_stroke = Stroke::NONE;
-        visuals.window_rounding = Rounding::same(16.0);
-
-        visuals
-    }
 }
 
 #[cfg(test)]
@@ -706,14 +671,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_all_themes_generate_visuals() {
+    fn test_all_themes_generate_palette() {
         for theme in ThemeMode::all() {
             let palette = theme.palette();
-            let visuals = palette.egui_visuals();
             assert!(!theme.name().is_empty());
-            assert!(!theme.emoji().is_empty());
             if palette.is_dark {
-                assert!(visuals.weak_text_color().r() > 150);
+                assert!(palette.text_primary.r() > 150);
             }
         }
     }

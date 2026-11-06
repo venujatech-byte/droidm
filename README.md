@@ -1,76 +1,37 @@
-# Server Launcher (Rust GUI)
+# Droidm - Android ADB Cockpit
 
-A fast, lightweight, cross-platform developer server launcher GUI written in Rust with **egui / eframe**.
-
-Runs natively on both **Linux** and **Windows** with near-zero idle CPU and ~15 MB RAM usage.
+A fast, lightweight developer orchestrator, telemetry cockpit, and management suite for Android devices built with **Tauri 2** (Rust host runtime) and a custom **Nocturnal Command** developer dashboard.
 
 ---
 
-#
-# Features
+## Features
 
-- **Cross-Platform Process Management**: Clean subprocess spawning, streaming, and tree termination on both Linux and Windows.
-- **Server Groups**: Tag and group servers (Frontend, Backend, DB, etc.) with group-level start/stop.
-- **Real-time Log Viewer**: Thread-safe buffered log streaming with error/warning syntax highlighting.
-- **Log Search & Filter (`Ctrl+F`)**: Substring search with instant highlighting, match counter, and line filtering.
-- **Quick Launch Palette (`Ctrl+P`)**: Fast fuzzy/substring palette to start/stop servers and trigger actions.
-- **Interactive Terminal Input (`❯`)**: Send commands directly to the running server's `stdin`.
-- **Port & Resource Polling**: Automatic TCP port detection, plus CPU & memory usage per server.
-- **Shared Configuration**: Uses the same `servers.json` as the Python launchers.
+- **Zero-Overhead Live Telemetry**: Single-session batch shell probes querying CPU, GPU, memory, thermals, battery, wireless, cellular, and processes without waking separate ADB subprocesses.
+- **Deep Telephony & Subsystem Telemetry**: Real-time baseband state, SIM profiles, RF signal metrics (RSRP, RSRQ, SINR, ASU), high-resolution Bluetooth audio codecs (SSC, LDAC, aptX, AAC, SBC), and battery power estimation.
+- **Communications Suite**: SMS conversation threads, recent call logs, contacts address book with instant dialing, and key event controls.
+- **Diagnostics & Firmware Toolkit**: Root detection (Magisk, KernelSU, APatch), SELinux enforcement switcher, system partition remount, and fastboot flasher.
+- **Screen Mirroring & Shell**: Low-latency `scrcpy` launch controls and interactive host terminal shell launcher.
 
 ---
 
 ## Prerequisites
 
-Install Rust if not already installed:
-
-### Linux / macOS:
-```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-source "$HOME/.cargo/env"
-```
-
-On Fedora/RHEL for native windowing dependencies:
-```bash
-sudo dnf install libxcb-devel libxkbcommon-devel
-```
-On Ubuntu/Debian:
-```bash
-sudo apt install libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev
-```
-
-### Windows:
-Download and run the installer from:
-[https://rustup.rs/](https://rustup.rs/)
+- **Rust** & **Cargo** (1.75+)
+- **ADB** (`android-tools` / Android SDK Platform-Tools)
+- **scrcpy** (optional, for screen mirroring)
 
 ---
 
-## Build & Run
+## Build & Check
 
-### 1. Run Development Build:
+### Verify compilation:
 ```bash
-cd server_launcher_rust
-cargo run
+cargo check
 ```
 
-### 2. Build Optimized Release Binary:
+### Run tests:
 ```bash
-cargo build --release
+node tests/power-tab.cjs
+node tests/calls-page.cjs
+node tests/top-apps.cjs
 ```
-The compiled standalone binary will be located at:
-- **Linux**: `server_launcher_rust/target/release/server_launcher`
-- **Windows**: `server_launcher_rust/target/release/server_launcher.exe`
-
-You can copy this single executable anywhere!
-
----
-
-## Keyboard Shortcuts
-
-| Shortcut | Action |
-| :--- | :--- |
-| **Ctrl + P** | Open Quick Launch Palette |
-| **Ctrl + F** | Open / Toggle Log Search Bar |
-| **Ctrl + A** | Start all servers |
-| **Ctrl + X** | Stop all servers |
-| **Escape** | Close active dialog or search bar |

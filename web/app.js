@@ -30,7 +30,7 @@
     });
     return `${cleaned}${suffix}`;
   };
-  const invokeOrFail = (...args) => { if (!invoke) throw new Error('Open this page inside the Server Launcher Tauri window.'); return invoke(...args); };
+  const invokeOrFail = (...args) => { if (!invoke) throw new Error('Open this page inside the Android Cockpit Tauri window.'); return invoke(...args); };
 
   function toast(message, error = false) {
     const el = $('#toast'); el.textContent = message; el.className = `toast show${error ? ' error' : ''}`;
@@ -67,7 +67,7 @@
       <div class="page-loading-wrapper">
         <div class="page-loading-card">
           <div class="loading-brand-container">
-            <img src="./icon.png" alt="Server Launcher Logo" class="loading-brand-logo" onerror="this.style.display='none'; const fb = document.getElementById('page-loading-fallback'); if (fb) fb.style.display='flex';" />
+            <img src="./icon.png" alt="Android Cockpit Logo" class="loading-brand-logo" onerror="this.style.display='none'; const fb = document.getElementById('page-loading-fallback'); if (fb) fb.style.display='flex';" />
             <div id="page-loading-fallback" class="loading-brand-fallback icon">&#xe153;</div>
             <div class="loading-ring-pulse"></div>
           </div>
@@ -4287,7 +4287,7 @@
 
   (async () => {
     if (!invoke) {
-      content.innerHTML = `<div class="card empty"><b>Tauri runtime is unavailable</b><span>Launch the Android cockpit from Server Launcher.</span></div>`;
+      content.innerHTML = `<div class="card empty"><b>Tauri runtime is unavailable</b><span>Launch the Android cockpit application.</span></div>`;
       return;
     }
     try {

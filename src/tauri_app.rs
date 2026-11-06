@@ -103,8 +103,8 @@ fn adb_theme_info() -> AdbThemeInfo {
         }
     }
 
-    let hex = |c: egui::Color32| format!("#{:02x}{:02x}{:02x}", c.r(), c.g(), c.b());
-    let rgba = |c: egui::Color32, a: f32| format!("rgba({}, {}, {}, {:.2})", c.r(), c.g(), c.b(), a);
+    let hex = |c: crate::theme::Color32| format!("#{:02x}{:02x}{:02x}", c.r(), c.g(), c.b());
+    let rgba = |c: crate::theme::Color32, a: f32| format!("rgba({}, {}, {}, {:.2})", c.r(), c.g(), c.b(), a);
 
     AdbThemeInfo {
         theme: theme_mode.id_str().to_string(),

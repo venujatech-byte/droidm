@@ -1785,6 +1785,41 @@ pub fn fastboot_flash(partition: &str, img_path: &Path) -> Result<String, String
     }
 }
 
+pub fn find_terminal() -> Option<(&'static str, &'static [&'static str])> {
+    let terminals: &[(&str, &[&str])] = &[
+        ("ptyxis", &["--new-window", "--"]),
+        ("kgx", &["-e"]),
+        ("gnome-terminal", &["--"]),
+        ("konsole", &["-e"]),
+        ("xfce4-terminal", &["-e"]),
+        ("x-terminal-emulator", &["-e"]),
+        ("alacritty", &["-e"]),
+        ("kitty", &[]),
+        ("wezterm", &["start", "--"]),
+        ("tilix", &["-e"]),
+        ("xterm", &["-e"]),
+        ("foot", &[]),
+        ("mate-terminal", &["-e"]),
+        ("lxterminal", &["-e"]),
+        ("terminator", &["-x"]),
+        ("xdg-terminal-exec", &[]),
+    ];
+
+    let path_var = std::env::var("PATH").unwrap_or_default();
+    let dirs: Vec<std::path::PathBuf> = std::env::split_paths(&path_var).collect();
+
+    for (term, args) in terminals {
+        for dir in &dirs {
+            let candidate = dir.join(term);
+            if candidate.is_file() {
+                return Some((*term, *args));
+            }
+        }
+    }
+
+    None
+}
+
 /// Launches an external host terminal running an interactive `adb -s <serial> shell`.
 pub fn launch_external_adb_terminal(serial: &str) -> Result<(), String> {
     let script_dir = std::env::temp_dir();
@@ -1804,7 +1839,7 @@ pub fn launch_external_adb_terminal(serial: &str) -> Result<(), String> {
     let script_content = format!(
 r#"#!/usr/bin/env bash
 echo "=========================================================="
-echo " Server Launcher: Android ADB Interactive Shell"
+echo " Android Cockpit: ADB Interactive Shell"
 echo " Device : {display_serial}"
 echo "=========================================================="
 echo "Connecting to {display_serial}..."
@@ -1834,7 +1869,7 @@ read -r
     #[cfg(not(target_os = "windows"))]
     {
         let script_str = script_path.to_string_lossy().to_string();
-        let chosen = crate::service::find_terminal();
+        let chosen = find_terminal();
         let mut cmd;
         if let Some((term, args)) = chosen {
             cmd = Command::new(term);
