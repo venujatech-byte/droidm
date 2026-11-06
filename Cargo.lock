@@ -888,6 +888,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "droidm"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "chrono",
+ "image",
+ "libc",
+ "rfd",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+]
+
+[[package]]
 name = "dtoa"
 version = "1.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3228,21 +3243,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
-]
-
-[[package]]
-name = "server_launcher"
-version = "0.1.0"
-dependencies = [
- "base64 0.22.1",
- "chrono",
- "image",
- "libc",
- "rfd",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
 ]
 
 [[package]]

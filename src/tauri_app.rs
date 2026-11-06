@@ -19,9 +19,15 @@ async fn adb_devices() -> Result<Vec<crate::adb::AdbDeviceInfo>, String> {
     .await
 }
 
+fn get_adb_env(suffix: &str) -> Option<String> {
+    std::env::var(format!("DROIDM_ADB_{}", suffix))
+        .or_else(|_| std::env::var(format!("SERVER_LAUNCHER_ADB_{}", suffix)))
+        .ok()
+}
+
 #[tauri::command]
 fn adb_initial_serial() -> Option<String> {
-    std::env::var("SERVER_LAUNCHER_ADB_SERIAL").ok()
+    get_adb_env("SERIAL")
 }
 
 #[derive(serde::Serialize)]
@@ -62,42 +68,42 @@ fn adb_theme_info() -> AdbThemeInfo {
         palette.apply_accent(crate::theme::current_gtk4_accent_color());
     }
 
-    if let Ok(theme_id) = std::env::var("SERVER_LAUNCHER_ADB_THEME") {
+    if let Some(theme_id) = get_adb_env("THEME") {
         let tm = crate::theme::ThemeMode::from_id_str(&theme_id);
         palette = tm.palette();
     }
-    if let Ok(env_acc) = std::env::var("SERVER_LAUNCHER_ADB_ACCENT") {
+    if let Some(env_acc) = get_adb_env("ACCENT") {
         if let Some(c) = crate::theme::parse_hex_color(&env_acc) {
             palette.apply_accent(c);
         }
     }
-    if let Ok(env_bg) = std::env::var("SERVER_LAUNCHER_ADB_BG") {
+    if let Some(env_bg) = get_adb_env("BG") {
         if let Some(c) = crate::theme::parse_hex_color(&env_bg) {
             palette.bg_app = c;
             palette.bg_main = c;
         }
     }
-    if let Ok(env_sb) = std::env::var("SERVER_LAUNCHER_ADB_SIDEBAR") {
+    if let Some(env_sb) = get_adb_env("SIDEBAR") {
         if let Some(c) = crate::theme::parse_hex_color(&env_sb) {
             palette.bg_sidebar = c;
         }
     }
-    if let Ok(env_card) = std::env::var("SERVER_LAUNCHER_ADB_CARD") {
+    if let Some(env_card) = get_adb_env("CARD") {
         if let Some(c) = crate::theme::parse_hex_color(&env_card) {
             palette.bg_card = c;
         }
     }
-    if let Ok(env_btn) = std::env::var("SERVER_LAUNCHER_ADB_BUTTON") {
+    if let Some(env_btn) = get_adb_env("BUTTON") {
         if let Some(c) = crate::theme::parse_hex_color(&env_btn) {
             palette.bg_button = c;
         }
     }
-    if let Ok(env_well) = std::env::var("SERVER_LAUNCHER_ADB_WELL") {
+    if let Some(env_well) = get_adb_env("WELL") {
         if let Some(c) = crate::theme::parse_hex_color(&env_well) {
             palette.bg_subtle = c;
         }
     }
-    if let Ok(env_at) = std::env::var("SERVER_LAUNCHER_ADB_ACCENT_TEXT") {
+    if let Some(env_at) = get_adb_env("ACCENT_TEXT") {
         if let Some(c) = crate::theme::parse_hex_color(&env_at) {
             palette.accent_text = c;
         }
@@ -127,7 +133,7 @@ fn adb_theme_info() -> AdbThemeInfo {
 
 #[tauri::command]
 fn adb_accent_color() -> Option<String> {
-    std::env::var("SERVER_LAUNCHER_ADB_ACCENT").ok()
+    get_adb_env("ACCENT")
 }
 
 #[tauri::command]

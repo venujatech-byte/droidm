@@ -18,26 +18,22 @@ pub fn ensure_linux_desktop_integration() {
         let size_dir = home.join(format!(".local/share/icons/hicolor/{}/apps", size));
         if std::fs::create_dir_all(&size_dir).is_ok() {
             let _ = std::fs::write(size_dir.join("droidm.png"), icon_512_bytes);
-            let _ = std::fs::write(size_dir.join("server_launcher.png"), icon_512_bytes);
         }
     }
 
     let dir_96 = home.join(".local/share/icons/hicolor/96x96/apps");
     if std::fs::create_dir_all(&dir_96).is_ok() {
         let _ = std::fs::write(dir_96.join("droidm.png"), icon_96_bytes);
-        let _ = std::fs::write(dir_96.join("server_launcher.png"), icon_96_bytes);
     }
 
     let base_icon_dir = home.join(".local/share/icons");
     if std::fs::create_dir_all(&base_icon_dir).is_ok() {
         let _ = std::fs::write(base_icon_dir.join("droidm.png"), icon_512_bytes);
-        let _ = std::fs::write(base_icon_dir.join("server_launcher.png"), icon_512_bytes);
     }
 
     let pixmaps_dir = home.join(".local/share/pixmaps");
     if std::fs::create_dir_all(&pixmaps_dir).is_ok() {
         let _ = std::fs::write(pixmaps_dir.join("droidm.png"), icon_512_bytes);
-        let _ = std::fs::write(pixmaps_dir.join("server_launcher.png"), icon_512_bytes);
     }
 
     let primary_icon_path = home.join(".local/share/icons/hicolor/512x512/apps/droidm.png");
@@ -80,7 +76,7 @@ Exec=\"{}\" %u\n\
 Icon={}\n\
 Terminal=false\n\
 Categories=Development;Utility;System;\n\
-StartupWMClass=server_launcher\n\
+StartupWMClass=droidm\n\
 StartupNotify=true\n\
 Keywords=adb;android;scrcpy;terminal;shell;telemetry;\n\
 X-GNOME-UsesNotifications=true\n",
@@ -126,18 +122,23 @@ fn main() {
     #[cfg(target_os = "linux")]
     ensure_linux_desktop_integration();
 
+    let set_serial = |serial: &str| {
+        std::env::set_var("DROIDM_ADB_SERIAL", serial);
+        std::env::set_var("SERVER_LAUNCHER_ADB_SERIAL", serial);
+    };
+
     let args: Vec<String> = std::env::args().skip(1).collect();
     if let Some(index) = args.iter().position(|arg| arg == "--adb-cockpit" || arg.starts_with("--adb-cockpit=") || arg == "--serial" || arg.starts_with("--serial=")) {
         if let Some(serial) = args[index].strip_prefix("--adb-cockpit=") {
-            std::env::set_var("SERVER_LAUNCHER_ADB_SERIAL", serial);
+            set_serial(serial);
         } else if let Some(serial) = args[index].strip_prefix("--serial=") {
-            std::env::set_var("SERVER_LAUNCHER_ADB_SERIAL", serial);
+            set_serial(serial);
         } else if let Some(serial) = args.get(index + 1) {
-            std::env::set_var("SERVER_LAUNCHER_ADB_SERIAL", serial);
+            set_serial(serial);
         }
     } else if let Some(first_arg) = args.first() {
         if !first_arg.starts_with('-') {
-            std::env::set_var("SERVER_LAUNCHER_ADB_SERIAL", first_arg);
+            set_serial(first_arg);
         }
     }
 
