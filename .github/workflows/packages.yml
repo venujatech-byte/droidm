@@ -109,6 +109,8 @@ jobs:
       - name: Check compilation
         run: cargo check --locked
       - name: Build packages
+        # Preserve the Cargo argument separator through the npm CLI shim on Windows.
+        shell: bash
         env:
           APPIMAGE_EXTRACT_AND_RUN: '1'
         run: tauri build --ci --bundles ${{ matrix.bundles }} -- --locked
