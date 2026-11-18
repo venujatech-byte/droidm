@@ -38,8 +38,9 @@ node tests/top-apps.cjs
 
 ## Downloadable packages
 
-Run **Actions → Desktop packages → Run workflow**, or push a `v*` tag
-(for example, `v0.1.0`). Download the packages from that run's **Artifacts**:
+Every push to `main` runs **Desktop packages**. You can also run
+**Actions → Desktop packages → Run workflow** on `main`.
+Download the packages from that run's **Artifacts**:
 
 | System | Package |
 | --- | --- |
@@ -50,9 +51,18 @@ Run **Actions → Desktop packages → Run workflow**, or push a `v*` tag
 | Windows portable | `droidm-windows-x64-portable.zip` (extract and run `droidm.exe`) |
 | Windows installer | `.msi` |
 
-All packages target x86-64. Versions come from `Cargo.toml` and
-`tauri.conf.json`; update both before tagging. The workflow stores artifacts;
-it does not publish a GitHub Release or an AUR entry.
+All packages target x86-64. CI sets the package version to `0.0.<workflow run
+number>`, starting at `0.0.1` for run 1. Failed runs consume a number; rerunning
+a build keeps its version. Local source versions start at `0.0.1`.
+CI updates the manifests and lockfile only in its checkout, without creating
+version commits.
+
+Each artifact includes `CHANGELOG.md` with commit subjects and hashes since
+the previous successful Desktop packages run on `main`. Failed builds do not
+advance that baseline. The first build includes all commits. The changelog
+also appears in the run summary and as its own artifact. Builds run one at a
+time; GitHub may replace an older pending run with a newer push.
+The workflow does not publish a GitHub Release or an AUR entry.
 
 Linux packages are built on Ubuntu 22.04 and require a compatible system
 (glibc 2.35 or newer); older distribution releases are not supported. Native

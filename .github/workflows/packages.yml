@@ -3,13 +3,71 @@ name: Desktop packages
 on:
   workflow_dispatch:
   push:
-    tags: ['v*']
+    branches: [main]
 
 permissions:
   contents: read
+  actions: read
+
+concurrency:
+  group: desktop-packages-main
+  cancel-in-progress: false
 
 jobs:
+  prepare:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04
+    outputs:
+      version: ${{ steps.changelog.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify version stamping
+        run: python tests/package-version.py
+      - name: Find previous successful build
+        id: previous
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const runs = await github.paginate(github.rest.actions.listWorkflowRuns, {
+              ...context.repo,
+              workflow_id: 'packages.yml',
+              branch: 'main',
+              status: 'success',
+              per_page: 100,
+            });
+            const previous = runs
+              .filter(run => run.run_number < context.runNumber)
+              .sort((a, b) => b.run_number - a.run_number)[0];
+            core.setOutput('sha', previous?.head_sha ?? '');
+      - name: Generate changelog
+        id: changelog
+        env:
+          PREVIOUS_SHA: ${{ steps.previous.outputs.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="0.0.$GITHUB_RUN_NUMBER"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "# Droidm $version" > CHANGELOG.md
+          echo >> CHANGELOG.md
+          range=HEAD
+          if [ -n "$PREVIOUS_SHA" ]; then
+            # Include commits from failed builds; only a successful run advances the baseline.
+            git fetch --no-tags origin "$PREVIOUS_SHA"
+            range="$PREVIOUS_SHA..HEAD"
+          fi
+          git log --reverse --format='- %s (%h)' "$range" >> CHANGELOG.md
+          cat CHANGELOG.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: droidm-changelog
+          path: CHANGELOG.md
+          if-no-files-found: error
+
   desktop:
+    needs: prepare
     name: ${{ matrix.platform }} x64
     runs-on: ${{ matrix.runner }}
     strategy:
@@ -25,6 +83,12 @@ jobs:
             bundles: msi
     steps:
       - uses: actions/checkout@v4
+      - name: Set package version
+        run: python .github/scripts/package-version.py ${{ needs.prepare.outputs.version }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: droidm-changelog
+          path: release-notes
       - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-node@v4
         with:
@@ -54,10 +118,11 @@ jobs:
         run: |
           set -euo pipefail
           mkdir dist
+          cp release-notes/CHANGELOG.md dist/
           cp target/release/bundle/deb/*.deb dist/
           cp target/release/bundle/rpm/*.rpm dist/
           cp target/release/bundle/appimage/*.AppImage dist/
-          test "$(find dist -type f -size +0c | wc -l)" -eq 3
+          test "$(find dist -type f -size +0c | wc -l)" -eq 4
           dpkg-deb --contents dist/*.deb
           rpm -qpl dist/*.rpm
       - name: Collect Windows packages
@@ -65,11 +130,12 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path dist
+          Copy-Item release-notes/CHANGELOG.md dist/
           Copy-Item target/release/bundle/msi/*.msi dist/
           if (!(Test-Path target/release/droidm.exe)) { throw 'Missing portable executable' }
           Compress-Archive -Path target/release/droidm.exe -DestinationPath dist/droidm-windows-x64-portable.zip
           $packages = @(Get-ChildItem dist -File)
-          if ($packages.Count -ne 2 -or @($packages | Where-Object Length -eq 0).Count) { throw 'Missing or empty Windows package' }
+          if ($packages.Count -ne 3 -or @($packages | Where-Object Length -eq 0).Count) { throw 'Missing or empty Windows package' }
       - uses: actions/upload-artifact@v4
         with:
           name: droidm-${{ matrix.platform }}-x64
@@ -91,6 +157,7 @@ jobs:
         run: |
           set -euo pipefail
           cp incoming/*.deb packaging/arch/droidm.deb
+          cp incoming/CHANGELOG.md packaging/arch/
           export DROIDM_VERSION="$(dpkg-deb --field packaging/arch/droidm.deb Version)"
           export DROIDM_DEB_SHA256="$(sha256sum packaging/arch/droidm.deb | cut -d ' ' -f 1)"
           docker run --rm \
@@ -106,5 +173,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: droidm-arch-x64
-          path: packaging/arch/*.pkg.tar.zst
+          path: |
+            packaging/arch/*.pkg.tar.zst
+            packaging/arch/CHANGELOG.md
           if-no-files-found: error
