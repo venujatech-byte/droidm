@@ -69,9 +69,9 @@ pub fn ensure_linux_desktop_integration() {
         "[Desktop Entry]\n\
 Version=1.0\n\
 Type=Application\n\
-Name=Android Cockpit\n\
-GenericName=Android ADB Cockpit\n\
-Comment=Developer Android Cockpit & Real-time Telemetry Dashboard\n\
+Name=droidm\n\
+GenericName=Android ADB Dashboard\n\
+Comment=droidm - Android device management and real-time telemetry\n\
 Exec=\"{}\" %u\n\
 Icon={}\n\
 Terminal=false\n\

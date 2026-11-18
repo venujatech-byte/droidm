@@ -1,6 +1,6 @@
-# Droidm - Android ADB Cockpit
+# droidm
 
-A fast, lightweight developer orchestrator, telemetry cockpit, and management suite for Android devices built with **Tauri 2** (Rust host runtime) and a custom **Nocturnal Command** developer dashboard.
+A fast, lightweight developer orchestrator, telemetry dashboard, and management suite for Android devices built with **Tauri 2** (Rust host runtime) and a custom **Nocturnal Command** developer dashboard.
 
 ---
 

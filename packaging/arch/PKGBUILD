@@ -1,7 +1,7 @@
 pkgname=droidm
 pkgver=${DROIDM_VERSION:?Set DROIDM_VERSION to the DEB version}
 pkgrel=1
-pkgdesc='Android ADB telemetry and management cockpit'
+pkgdesc='droidm - Android ADB telemetry and management dashboard'
 arch=('x86_64')
 url='https://github.com/venujatech-byte/droidm'
 depends=('cairo' 'desktop-file-utils' 'gdk-pixbuf2' 'glib2' 'gtk3'

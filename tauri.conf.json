@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Android Cockpit",
+  "productName": "droidm",
   "version": "0.0.1",
   "identifier": "com.droidm.android-cockpit",
   "build": {
@@ -11,7 +11,7 @@
     "windows": [
       {
         "label": "adb-cockpit",
-        "title": "Android Cockpit",
+        "title": "droidm",
         "width": 1360,
         "height": 860,
         "minWidth": 900,

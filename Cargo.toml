@@ -3,7 +3,7 @@ name = "droidm"
 version = "0.0.1"
 edition = "2021"
 authors = ["Venuka Silva"]
-description = "Android Cockpit - Developer ADB telemetry and management cockpit written in Rust and Tauri"
+description = "droidm - Developer ADB telemetry and management dashboard written in Rust and Tauri"
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }

@@ -21,7 +21,7 @@ class PackageVersionTests(unittest.TestCase):
                 'version = 4\n\n[[package]]\nname = "dependency"\nversion = "0.0.1"\n'
                 '\n[[package]]\nname = "droidm"\nversion = "0.0.1"\n'
             ),
-            'tauri.conf.json': '{"version": "0.0.1", "productName": "Android Cockpit"}\n',
+            'tauri.conf.json': '{"version": "0.0.1", "productName": "droidm"}\n',
         }
         for name, content in self.originals.items():
             (self.root / name).write_text(content)
@@ -37,7 +37,7 @@ class PackageVersionTests(unittest.TestCase):
             ),
         )
         self.assertEqual(json.loads((self.root / 'tauri.conf.json').read_text()), {
-            'version': '0.0.42', 'productName': 'Android Cockpit',
+            'version': '0.0.42', 'productName': 'droidm',
         })
 
     def test_rejects_invalid_or_unsupported_msi_versions(self):

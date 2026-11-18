@@ -1839,7 +1839,7 @@ pub fn launch_external_adb_terminal(serial: &str) -> Result<(), String> {
     let script_content = format!(
 r#"#!/usr/bin/env bash
 echo "=========================================================="
-echo " Android Cockpit: ADB Interactive Shell"
+echo " droidm: ADB Interactive Shell"
 echo " Device : {display_serial}"
 echo "=========================================================="
 echo "Connecting to {display_serial}..."
