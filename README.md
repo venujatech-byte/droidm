@@ -40,7 +40,9 @@ node tests/top-apps.cjs
 
 Every push to `main` runs **Desktop packages**. You can also run
 **Actions → Desktop packages → Run workflow** on `main`.
-Download the packages from that run's **Artifacts**:
+Once all builds succeed, CI publishes a GitHub Release tagged
+`v0.0.<workflow run number>`, with the packages below and the changelog.
+Download them from the repository's **Releases** page or the run's **Artifacts**:
 
 | System | Package |
 | --- | --- |
@@ -62,7 +64,9 @@ the previous successful Desktop packages run on `main`. Failed builds do not
 advance that baseline. The first build includes all commits. The changelog
 also appears in the run summary and as its own artifact. Builds run one at a
 time; GitHub may replace an older pending run with a newer push.
-The workflow does not publish a GitHub Release or an AUR entry.
+Rerunning the same build updates its existing release and assets. Release
+publishing uses the automatic GitHub Actions token; no extra secret is needed.
+The workflow does not publish an AUR entry.
 
 Linux packages are built on Ubuntu 22.04 and require a compatible system
 (glibc 2.35 or newer); older distribution releases are not supported. Native
