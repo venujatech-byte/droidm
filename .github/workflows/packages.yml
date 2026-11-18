@@ -1,0 +1,110 @@
+name: Desktop packages
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  desktop:
+    name: ${{ matrix.platform }} x64
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Use the oldest Ubuntu runner with WebKitGTK 4.1 for wider compatibility.
+          - platform: linux
+            runner: ubuntu-22.04
+            bundles: deb,rpm,appimage
+          - platform: windows
+            runner: windows-2022
+            bundles: msi
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf rpm
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: '. -> target'
+      - name: Install Tauri CLI
+        run: npm install --global @tauri-apps/cli@2
+      - name: Generate Windows icons
+        if: runner.os == 'Windows'
+        run: tauri icon assets/icon.png --output icons
+      - name: Check compilation
+        run: cargo check --locked
+      - name: Build packages
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: '1'
+        run: tauri build --ci --bundles ${{ matrix.bundles }} -- --locked
+      - name: Collect Linux packages
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir dist
+          cp target/release/bundle/deb/*.deb dist/
+          cp target/release/bundle/rpm/*.rpm dist/
+          cp target/release/bundle/appimage/*.AppImage dist/
+          test "$(find dist -type f -size +0c | wc -l)" -eq 3
+          dpkg-deb --contents dist/*.deb
+          rpm -qpl dist/*.rpm
+      - name: Collect Windows packages
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path dist
+          Copy-Item target/release/bundle/msi/*.msi dist/
+          if (!(Test-Path target/release/droidm.exe)) { throw 'Missing portable executable' }
+          Compress-Archive -Path target/release/droidm.exe -DestinationPath dist/droidm-windows-x64-portable.zip
+          $packages = @(Get-ChildItem dist -File)
+          if ($packages.Count -ne 2 -or @($packages | Where-Object Length -eq 0).Count) { throw 'Missing or empty Windows package' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: droidm-${{ matrix.platform }}-x64
+          path: dist/*
+          if-no-files-found: error
+
+  arch:
+    name: Arch Linux x64
+    needs: desktop
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: droidm-linux-x64
+          path: incoming
+      - name: Create Arch package
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp incoming/*.deb packaging/arch/droidm.deb
+          export DROIDM_VERSION="$(dpkg-deb --field packaging/arch/droidm.deb Version)"
+          export DROIDM_DEB_SHA256="$(sha256sum packaging/arch/droidm.deb | cut -d ' ' -f 1)"
+          docker run --rm \
+            -v "$PWD/packaging/arch:/package" \
+            -e DROIDM_VERSION -e DROIDM_DEB_SHA256 \
+            archlinux:base-devel bash -euc '
+              useradd --create-home builder
+              chown -R builder:builder /package
+              cd /package
+              runuser -u builder -- makepkg --nodeps --noconfirm
+              bsdtar -tf droidm-*.pkg.tar.zst usr/bin/droidm
+            '
+      - uses: actions/upload-artifact@v4
+        with:
+          name: droidm-arch-x64
+          path: packaging/arch/*.pkg.tar.zst
+          if-no-files-found: error

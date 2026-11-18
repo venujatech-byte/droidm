@@ -1,0 +1,16 @@
+pkgname=droidm
+pkgver=${DROIDM_VERSION:?Set DROIDM_VERSION to the DEB version}
+pkgrel=1
+pkgdesc='Android ADB telemetry and management cockpit'
+arch=('x86_64')
+url='https://github.com/venujatech-byte/droidm'
+depends=('cairo' 'desktop-file-utils' 'gdk-pixbuf2' 'glib2' 'gtk3'
+         'hicolor-icon-theme' 'libsoup3' 'pango' 'webkit2gtk-4.1' 'android-tools')
+optdepends=('scrcpy: screen mirroring')
+options=('!strip' '!debug')
+source=('droidm.deb')
+sha256sums=("${DROIDM_DEB_SHA256:?Set DROIDM_DEB_SHA256 to the DEB checksum}")
+
+package() {
+  bsdtar -xf "$srcdir"/data.tar.* -C "$pkgdir"
+}

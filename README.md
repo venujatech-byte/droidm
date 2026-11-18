@@ -35,3 +35,32 @@ node tests/power-tab.cjs
 node tests/calls-page.cjs
 node tests/top-apps.cjs
 ```
+
+## Downloadable packages
+
+Run **Actions → Desktop packages → Run workflow**, or push a `v*` tag
+(for example, `v0.1.0`). Download the packages from that run's **Artifacts**:
+
+| System | Package |
+| --- | --- |
+| Linux portable | `.AppImage` (make executable before running) |
+| Ubuntu, Debian, Kali, Linux Mint | `.deb` |
+| Fedora | `.rpm` |
+| Arch Linux | `.pkg.tar.zst` (install with `sudo pacman -U <file>`) |
+| Windows portable | `droidm-windows-x64-portable.zip` (extract and run `droidm.exe`) |
+| Windows installer | `.msi` |
+
+All packages target x86-64. Versions come from `Cargo.toml` and
+`tauri.conf.json`; update both before tagging. The workflow stores artifacts;
+it does not publish a GitHub Release or an AUR entry.
+
+Linux packages are built on Ubuntu 22.04 and require a compatible system
+(glibc 2.35 or newer); older distribution releases are not supported. Native
+packages also need WebKitGTK 4.1. AppImage may require FUSE on the host, or
+can be launched with `--appimage-extract-and-run`.
+
+Windows portable requires the Microsoft Edge WebView2 Runtime already
+installed; the MSI installs it when missing and may need internet access.
+Packages are unsigned. Install ADB separately and put it on `PATH`
+(`adb` on Debian-based systems, `android-tools` on Fedora/Arch, or Google's
+Platform-Tools on Windows). Install `scrcpy` separately for screen mirroring.
